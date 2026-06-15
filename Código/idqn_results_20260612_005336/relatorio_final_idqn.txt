@@ -1,0 +1,42 @@
+
+    ========================================
+    RELATÓRIO FINAL - IDQN (3000 EPISÓDIOS)
+    ========================================
+
+    DATA: 2026-06-12 04:31:04
+    DIRETÓRIO: /content/drive/MyDrive/Atividades/PUC-DI/LocalMultiAgente/Código/idqn_results_20260612_005336
+
+    CONFIGURAÇÃO:
+    - Modelo: IDQN (Independent Deep Q-Network)
+    - Total de episódios: 3000
+    - Tempo total: 217.4 minutos
+    - Batch Size: 256
+    - Learning Rate: 0.0001
+    - Hidden Dim: 512
+    - Falhas nos robôs: 20% chance
+    - Barreiras Y: removidas aleatoriamente (50% chance)
+
+    MÉTRICAS FINAIS (últimos 100 episódios):
+    - Recompensa média: 316.05
+    - Entregas médias: 8.00/8
+    - Taxa de sucesso final: 100.0%
+    - Colisões médias: 9.2
+    - Total falhas R1: 61478
+    - Total falhas R2: 58911
+
+    MELHORES RESULTADOS:
+    - Melhor recompensa: 317.81
+    - Melhor entrega: 8/8
+    - Menor número de steps: 20
+
+    GRÁFICOS GERADOS:
+    - grafico_recompensa_idqn.png
+    - grafico_entregas_idqn.png
+    - grafico_steps_idqn.png
+    - grafico_taxa_sucesso_idqn.png
+    - grafico_colisoes_idqn.png
+    - grafico_falhas_idqn.png
+    - grafico_distancia_idqn.png
+
+    ========================================
+    

@@ -1,0 +1,41 @@
+
+    ========================================
+    RELATÓRIO FINAL - MAPPO (3000 EPISÓDIOS)
+    ========================================
+
+    DATA: 2026-06-12 17:03:19
+    DIRETÓRIO: /content/drive/MyDrive/Atividades/PUC-DI/LocalMultiAgente/Código/mappo_3000ep_results_20260612_115732
+
+    CONFIGURAÇÃO OTIMIZADA:
+    - Total de episódios: 3000
+    - Tempo total: 305.7 minutos
+    - EPSILON_DECAY_STEPS: 100000
+    - ACTOR_LR: 0.0001
+    - ENTROPY_COEF: 0.05
+    - PPO_EPOCHS: 20
+    - Barreiras Y removidas: 50% chance
+    - Falhas nos robôs: 20% chance
+
+    MÉTRICAS FINAIS (últimos 100 episódios):
+    - Recompensa média: -9.52
+    - Entregas médias: 0.07/8
+    - Taxa de sucesso final: 0.0%
+    - Colisões médias: 263.7
+    - Total falhas R1: 180653
+    - Total falhas R2: 189882
+
+    MELHORES RESULTADOS:
+    - Melhor recompensa: 308.69
+    - Melhor entrega: 8/8
+    - Menor número de steps: 208
+
+    GRÁFICOS GERADOS (SEM MÉDIA MÓVEL):
+    - grafico_recompensa.png (3000 pontos)
+    - grafico_entregas.png (3000 pontos)
+    - grafico_steps.png (3000 pontos)
+    - grafico_taxa_sucesso.png (3000 pontos)
+    - grafico_colisoes.png (3000 pontos)
+    - grafico_falhas.png (3000 pontos)
+
+    ========================================
+    

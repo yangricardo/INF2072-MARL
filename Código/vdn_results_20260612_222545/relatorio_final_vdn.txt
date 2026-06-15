@@ -1,0 +1,39 @@
+
+========================================
+RELATÓRIO FINAL — VDN (3000 EPISÓDIOS)
+========================================
+DATA:      2026-06-13 03:51:38
+DIRETÓRIO: /content/drive/MyDrive/Atividades/PUC-DI/LocalMultiAgente/Código/vdn_results_20260612_222545
+
+CONFIGURAÇÃO:
+  Método:          VDN (Value Decomposition Networks)
+  Q_total          = Q1 + Q2  (decomposição aditiva)
+  Episódios:       3000
+  Tempo total:     325.8 min
+  Batch Size:      256
+  Learning Rate:   0.0003
+  Gamma:           0.97
+  Hidden Dim:      256
+  Falhas robôs:    15%
+
+MÉTRICAS (últimos 100 episódios):
+  Recompensa média:       7.03
+  Entregas médias:        1.04/8
+  Taxa sucesso completo:  0.0%  (8/8 caixas)
+  Colisões médias:        807.3
+
+MELHORES RESULTADOS:
+  Melhor recompensa:  373.66
+  Máx entregas/ep:    8/8
+  Menor steps:        256
+
+GRÁFICOS GERADOS (8):
+  grafico_recompensa_vdn.png
+  grafico_entregas_vdn.png
+  grafico_steps_vdn.png
+  grafico_taxa_sucesso_vdn.png
+  grafico_colisoes_vdn.png
+  grafico_falhas_vdn.png
+  grafico_distancia_vdn.png
+  grafico_loss_vdn.png
+========================================
