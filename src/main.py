@@ -9,6 +9,7 @@ Exemplos:
 import argparse
 import traceback
 
+from .evaluation import _bg_pool
 from .agents import IDQNAgent, RandomAgent, hatrpo, mappo, qmix, vdn
 from .config import (
     HATRPOConfig,
@@ -99,6 +100,9 @@ def main():
     except Exception as e:
         print(f"\n❌ Erro durante o treinamento: {e}")
         traceback.print_exc()
+    finally:
+        # N10: Garante que tarefas de vídeo/plot em background sejam concluídas
+        _bg_pool.shutdown(wait=True)
 
 
 if __name__ == "__main__":
