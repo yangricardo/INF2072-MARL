@@ -56,6 +56,7 @@ class BaseConfig:
     BASE_DIR: str = "resultados_warehouse"
     SAVE_CHECKPOINTS: bool = True
     SAVE_CHECKPOINT_EVERY: int = 500
+    BATCH_SIZE: int = 256
 
 
 class IDQNConfig(BaseConfig):
