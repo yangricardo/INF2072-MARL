@@ -163,7 +163,9 @@ class QMIXTrainer:
         loss = (weights * td_errors.pow(2)).mean()
 
         self.mixer_optimizer.zero_grad()
-        loss.backward()
+        # B11: retain_graph=True pois agent_loss.backward() abaixo precisa do grafo
+        # compartilhado via curr_qs_all[i] (forward pass do agente)
+        loss.backward(retain_graph=True)
         torch.nn.utils.clip_grad_norm_(self.mixer.parameters(), self.config.MAX_GRAD_NORM)
         self.mixer_optimizer.step()
 
