@@ -1,5 +1,8 @@
 """Loop de treino multi-sessão, reutilizável por qualquer agente.
 
+Extraído de: Código/Ambiente e Execução IDQN - Versão 1.3.0.py
+(train_session, run_multi_session_training). Usado por IDQN e Random.
+
 ``run_training`` recebe uma *fábrica de agentes* (``agent_class``) com assinatura
 ``(state_dim, action_dim, agent_id, config)`` — tanto ``IDQNAgent`` quanto
 ``RandomAgent`` a satisfazem, então o mesmo loop serve para ambos. Agentes sem
@@ -57,7 +60,7 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
         desc=f"Sessão {session_id:04d}",
         total=total_episodes - start_episode,
     ):
-        obs, _ = env.reset()
+        obs, info = env.reset()
         episode_reward = 0
         episode_collisions = 0
         step = 0
@@ -182,7 +185,7 @@ def run_training(agent_class, config, num_sessions=1, record_video=True):
     env = WarehouseEnv(config=config)
     sample_obs, _ = env.reset()
     state_dim = len(sample_obs)
-    action_dim = env.action_space[0].n
+    action_dim = env.num_actions
     env.close()
 
     agents = [agent_class(state_dim, action_dim, i, config) for i in range(2)]
