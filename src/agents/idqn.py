@@ -56,6 +56,7 @@ class IDQNAgent:
         if self.steps_done >= self.config.EPSILON_DECAY_STEPS:
             return self.config.EPSILON_END
 
+        # ε-greedy linear annealing: ε(t) = ε_start - (ε_start - ε_end) · t / T
         epsilon = self.config.EPSILON_START - (
             self.config.EPSILON_START - self.config.EPSILON_END
         ) * self.steps_done / self.config.EPSILON_DECAY_STEPS
@@ -114,6 +115,7 @@ class IDQNAgent:
         dones = torch.FloatTensor(np.array(dones)).to(self.device)
 
         with torch.no_grad():
+            # Double-DQN: y = r + γ·Q_target(s', argmax_a' Q_policy(s',a'))·(1-done)
             next_actions = self.policy_net(next_states).argmax(1, keepdim=True)
             next_q_values = (
                 self.target_net(next_states).gather(1, next_actions).squeeze(1)
@@ -122,8 +124,10 @@ class IDQNAgent:
 
         current_q = self.policy_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
+        # TD error: δ = y - Q(s,a)
         td_errors = target_q - current_q
 
+        # PER loss: L = E_i[w_i · δ_i²] where w_i = (N·P(i))^(-β) / max(w)
         if self.config.PRIORITIZED_REPLAY and weights is not None:
             loss = (weights * td_errors.pow(2)).mean()
         else:
@@ -150,6 +154,7 @@ class IDQNAgent:
         for target_param, policy_param in zip(
             self.target_net.parameters(), self.policy_net.parameters()
         ):
+            # Polyak averaging (soft update): θ_target ← τ·θ + (1-τ)·θ_target
             target_param.data.copy_(
                 self.config.TAU * policy_param.data
                 + (1 - self.config.TAU) * target_param.data
