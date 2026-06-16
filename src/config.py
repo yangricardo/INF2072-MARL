@@ -190,6 +190,8 @@ class HATRPOConfig(BaseConfig):
     GAMMA = 0.99
     LAMBDA = 0.95
     MAX_KL = 0.02
+    CLIP_EPS = 0.2  # PPO clipping range: [1-CLIP_EPS, 1+CLIP_EPS]
+    TAU = 0.005  # soft update rate for critic target network
 
     HIDDEN_DIM = 512
     DROPOUT_RATE = 0.1
