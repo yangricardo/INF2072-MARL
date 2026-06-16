@@ -203,20 +203,32 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - Cada `IDQNAgent` mantém uma `policy_net` e uma `target_net` (`ImprovedDQN`).
 - **Seleção de ação:** epsilon-greedy com decaimento linear de ε: 1,0 → 0,05 em 50 000 passos.
 - **Memória:** `PrioritizedReplayBuffer` (PER) com α=0,6, β=0,4 — transições com maior erro TD são amostradas com maior frequência.
-  
+
   **Prioridade normalizada e importance-sampling weights** (Schaul et al. 2015):
-  $$p_i = \frac{|\delta_i|^\alpha}{\sum_j |\delta_j|^\alpha}, \quad w_i = \frac{(N \cdot p_i)^{-\beta}}{\max_j w_j}$$
-  
+
+```math
+p_i = \frac{|\delta_i|^\alpha}{\sum_j |\delta_j|^\alpha}, \qquad w_i = \frac{(N \cdot p_i)^{-\beta}}{\max_j w_j}
+```
+
 - **Atualização (Double DQN):** a `policy_net` seleciona a ação greedy; a `target_net` avalia o valor, reduzindo viés de superestimação.
-  
-  **TD-target (Mnih et al. 2015, van Hasselt et al. 2016):**
-  $$y_i = r_i + \gamma \, Q_{\theta^-}(s'_i, \arg\max_{a'} Q_\theta(s'_i, a')) \cdot (1 - d_i)$$
-  
+
+  **TD-target** (Mnih et al. 2015; van Hasselt et al. 2016):
+
+```math
+y_i = r_i + \gamma \, Q_{\theta^-}\!\left(s'_i,\, \arg\max_{a'} Q_\theta(s'_i, a')\right) \cdot (1 - d_i)
+```
+
   **Loss com pesos PER:**
-  $$\mathcal{L}(\theta) = \mathbb{E}_i\left[ w_i \cdot (y_i - Q_\theta(s_i, a_i))^2 \right]$$
-  
+
+```math
+\mathcal{L}(\theta) = \mathbb{E}_i\!\left[ w_i \cdot \bigl(y_i - Q_\theta(s_i, a_i)\bigr)^2 \right]
+```
+
 - **Soft update:** Polyak averaging com τ=0,001. Treino começa após 1 000 transições e ocorre a cada 4 passos.
-  $$\theta^- \leftarrow \tau \, \theta + (1-\tau) \, \theta^-$$
+
+```math
+\theta^{-} \leftarrow \tau\,\theta + (1-\tau)\,\theta^{-}
+```
 
 **Hiperparâmetros principais:**
 
@@ -247,14 +259,24 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - `VDNController` centraliza ambas as redes (`policy_nets: ModuleList[AgentNet]`) num único otimizador Adam.
 - Transições **conjuntas** `(s, [a₁,a₂], [r₁,r₂], s', done)` são armazenadas no `VDNPrioritizedReplayBuffer`.
 - **Fatoração aditiva (VDN):** soma dos Q-values individuais, permitindo execução descentralizada (Sunehag et al. 2017):
-  $$Q_{\text{tot}}(s, a_1, a_2) = Q_1(o_1, a_1) + Q_2(o_2, a_2)$$
-  
+
+```math
+Q_{\text{tot}}(s, a_1, a_2) = Q_1(o_1, a_1) + Q_2(o_2, a_2)
+```
+
 - **Individual-Global-Max (IGM):** A fatoração aditiva garante decomponibilidade do argmax:
-  $$\arg\max_{\mathbf{a}} Q_{\text{tot}} = \left(\arg\max_{a_1} Q_1, \arg\max_{a_2} Q_2\right)$$
-  Isto preserva execução descentralizada: cada agente só precisa de sua própria $Q$-function.
-  
+
+```math
+\arg\max_{\mathbf{a}} Q_{\text{tot}} = \bigl(\arg\max_{a_1} Q_1,\; \arg\max_{a_2} Q_2\bigr)
+```
+
+  Isto preserva execução descentralizada: cada agente só precisa de sua própria Q-function.
+
 - **Target (Double-DQN por agente):** a `policy_net` seleciona a ação greedy; a `target_net` avalia:
-  $$y = \sum_{i=1}^{2} r_i + \gamma \sum_{i=1}^{2} \max_{a'_i} Q_i^-(o'_i, a'_i) \cdot (1 - d)$$
+
+```math
+y = \sum_{i=1}^{2} r_i + \gamma \sum_{i=1}^{2} \max_{a'_i} Q_i^{-}(o'_i, a'_i) \cdot (1 - d)
+```
   
 - Learning rate com _cosine annealing_ ao longo de todos os episódios. Soft update das target nets com τ=0,005.
 
@@ -287,17 +309,27 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - `QMIXPrioritizedReplayBuffer` armazena transições enriquecidas com estados globais: `(s, [a₁,a₂], [r₁,r₂], s', done, global_s, next_global_s)`.
   
 - **Rede de mistura QMIX** (Rashid et al. 2018) com monotonicidade garantida:
-  $$Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \text{ReLU}\left(\mathbf{W}_1(s) \mathbf{q} + \mathbf{b}_1(s)\right) + b_2(s)$$
-  onde $\mathbf{W}_1(s) \geq 0$ e $\mathbf{w}_2(s) \geq 0$ (via `abs()`), garantindo:
-  $$\frac{\partial Q_{\text{tot}}}{\partial Q_i} \geq 0 \quad \forall i$$
-  
+
+```math
+Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(\mathbf{W}_1(s)\,\mathbf{q} + \mathbf{b}_1(s)\right) + b_2(s)
+```
+
+  onde $\mathbf{W}_1(s) \geq 0$ e $\mathbf{w}_2(s) \geq 0$ (via `abs()`), garantindo a condição de monotonicidade:
+
+```math
+\frac{\partial Q_{\text{tot}}}{\partial Q_i} \geq 0 \quad \forall\, i
+```
+
 - **`QMIXTrainer.optimize()`:**
-  1. Computa Q-values correntes: $Q_{\text{tot}}^{\text{curr}} = \text{mixer}([Q_1, Q_2], s)$
-  2. Computa targets: $Q_{\text{tot}}^{\text{targ}} = \text{target\_mixer}([\max Q_1', \max Q_2'], s')$
-  3. Loss do mixer (MSE com pesos PER):
-     $$\mathcal{L}_{\text{mixer}} = \mathbb{E}\left[w \cdot (y - Q_{\text{tot}}^\theta)^2\right], \quad y = \sum_i r_i + \gamma Q_{\text{tot}}^- \cdot (1-d)$$
-  4. Por agente: loss contrafactual (similar ao COMA): usa diferença $(y - Q_{\text{tot}})^{\text{detach}} \cdot Q_i$
-  5. Soft update das target nets individuais e do target mixer com τ=0,001.
+  1. Computa Q-values correntes e targets via mixer e target-mixer.
+  2. Loss do mixer (MSE com pesos PER):
+
+```math
+\mathcal{L}_{\text{mixer}} = \mathbb{E}\!\left[w \cdot \bigl(y - Q_{\text{tot}}^\theta\bigr)^2\right], \qquad y = \sum_i r_i + \gamma\, Q_{\text{tot}}^{-} \cdot (1-d)
+```
+
+  3. Por agente: loss contrafactual (similar ao COMA) usando $(y - Q_{\text{tot}})^{\text{detach}} \cdot Q_i$.
+  4. Soft update das target nets individuais e do target mixer com τ=0,001.
 
 **Hiperparâmetros principais:**
 
