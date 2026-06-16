@@ -115,14 +115,17 @@ Cada robô possui 6 ações discretas:
 
 ### Espaço de Observações
 
-**Observação global (22-dim, `float32`)** — compartilhada entre os agentes:
+**Observação global (24-dim, `float32`)** — compartilhada entre os agentes:
 
 - Posições normalizadas dos 2 robôs: 2 × 2 = 4 valores
 - Posições normalizadas das 4 caixas: 4 × 2 = 8 valores
 - Posições normalizadas dos 4 alvos: 4 × 2 = 8 valores
 - Distância mínima de cada robô à caixa mais próxima + ao alvo mais próximo: 2 × 2 = 4 valores
 
-**Observação por robô (24-dim)** — usada por MAPPO e HATRPO: observação global (22-dim) concatenada com um vetor one-hot de 2 bits identificando o robô (`[1,0]` para o robô 0, `[0,1]` para o robô 1).
+**Observação por robô (27-dim)** — usada por IDQN no treino e por MAPPO/HATRPO: observação global
+(24-dim) + one-hot de 2 bits identificando o robô (`[1,0]`/`[0,1]`) + 1 flag de inventário
+(`1.0` se está carregando uma caixa, `0.0` caso contrário). As dimensões são derivadas do mapa em
+runtime (`len(env._get_observation_for_robot(0))`), então mudam automaticamente se o mapa mudar.
 
 Todos os valores são normalizados pela largura/altura da grade.
 
@@ -131,17 +134,20 @@ Todos os valores são normalizados pela largura/altura da grade.
 | Evento                                         | Recompensa                      |
 | ---------------------------------------------- | ------------------------------- |
 | Movimento válido                               | −0,005                          |
-| Movimento inválido (parede, barreira, colisão) | −0,02                           |
+| Movimento inválido (parede, barreira, colisão) | −0,05                           |
 | Pegar caixa (bem-sucedido)                     | +2,0                            |
 | Pegar caixa (sem caixa na posição)             | −0,02                           |
 | Soltar caixa em alvo —**entrega!**             | +25,0                           |
-| Soltar caixa fora de alvo                      | −0,05                           |
+| Soltar caixa fora de alvo                      | −0,1                            |
 | Soltar sem carregar caixa                      | −0,02                           |
-| Aproximação da caixa mais próxima (shaping)    | +0,1 × Δdist                    |
-| Afastamento da caixa mais próxima (shaping)    | −0,02 × Δdist                   |
+| Shaping de proximidade ao objetivo atual       | 0,1 × (d_t − γ·d_{t+1})         |
 | **Bônus terminal**: todas as caixas entregues  | +50,0 (dividido entre os robôs) |
 
-O _potential-based reward shaping_ incentiva os robôs a convergirem para as caixas sem interferir com a política ótima (o potencial cancela no somatório de recompensas descontadas).
+O objetivo de cada robô é dinâmico: a caixa mais próxima se está vazio, ou o alvo mais próximo se
+está carregando. O _shaping_ é **potential-based** (Ng et al. 1999) com potencial Φ(s) = −d (distância
+ao objetivo), aplicando F = γ·Φ(s′) − Φ(s) = d_t − γ·d_{t+1}. Por telescopar ao longo do episódio, não
+altera a política ótima e — por ser simétrico — não cria o ciclo de _farming_ do shaping assimétrico
+anterior (que rendia ganho líquido ao oscilar perto de uma caixa).
 
 ---
 
@@ -205,8 +211,8 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 **Como funciona:**
 
 - Cada `IDQNAgent` mantém uma `policy_net` e uma `target_net` (`ImprovedDQN`).
-- **Seleção de ação:** epsilon-greedy com decaimento linear de ε: 1,0 → 0,05 em 50 000 passos ([`get_epsilon` linha 55](src/agents/idqn.py#L55)).
-- **Memória:** `PrioritizedReplayBuffer` (PER) com α=0,6, β=0,4 — transições com maior erro TD são amostradas com maior frequência.
+- **Seleção de ação:** epsilon-greedy com decaimento linear de ε: 1,0 → 0,05 em 200 000 passos ([`get_epsilon`](src/agents/idqn.py)).
+- **Memória:** `PrioritizedReplayBuffer` (PER) com α=0,6, β: 0,6 → 1,0 (annealing linear) — transições com maior erro TD são amostradas com maior frequência.
 
 **Prioridade normalizada e importance-sampling weights** (Schaul et al. 2015) — [`replay_buffer.py` linhas 37–45](src/replay_buffer.py#L37-L45):
 
@@ -228,7 +234,7 @@ y_i = r_i + \gamma \, Q_{\theta^-}\!\left(s'_i,\, \arg\max_{a'} Q_\theta(s'_i, a
 \mathcal{L}(\theta) = \mathbb{E}_i\!\left[ w_i \cdot \bigl(y_i - Q_\theta(s_i, a_i)\bigr)^2 \right]
 ```
 
-**Soft update** (Polyak averaging, τ=0,001) — [`idqn.py` linhas 153–160](src/agents/idqn.py#L153-L160):
+**Soft update** (Polyak averaging, τ=0,005) — [`idqn.py`](src/agents/idqn.py):
 
 ```math
 \theta^{-} \leftarrow \tau\,\theta + (1-\tau)\,\theta^{-}
@@ -239,12 +245,13 @@ y_i = r_i + \gamma \, Q_{\theta^-}\!\left(s'_i,\, \arg\max_{a'} Q_\theta(s'_i, a
 | Parâmetro       | Valor   |
 | --------------- | ------- |
 | Learning rate   | 0,0001  |
-| Batch size      | 256     |
-| γ (desconto)    | 0,95    |
-| τ (soft update) | 0,001   |
+| Batch size      | 64      |
+| γ (desconto)    | 0,99    |
+| τ (soft update) | 0,005   |
 | Hidden dim      | 512     |
-| Buffer size     | 500 000 |
-| ε_decay_steps   | 50 000  |
+| Dropout         | 0,0     |
+| Buffer size     | 100 000 |
+| ε_decay_steps   | 200 000 |
 
 **Referências:**
 
