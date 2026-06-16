@@ -168,11 +168,13 @@ class IDQNAgent:
     def soft_update_target(self):
         # Polyak averaging (soft update): θ_target ← τ·θ + (1-τ)·θ_target
         # Usa _foreach_lerp_ para vetorizar a operação sobre todos os parâmetros
-        torch._foreach_lerp_(
-            list(self.target_net.parameters()),
-            list(self.policy_net.parameters()),
-            self.config.TAU,
-        )
+        # B10: torch.no_grad() necessário pois _foreach_lerp_ é in-place em leaf tensors
+        with torch.no_grad():
+            torch._foreach_lerp_(
+                list(self.target_net.parameters()),
+                list(self.policy_net.parameters()),
+                self.config.TAU,
+            )
 
     def save_checkpoint(self, save_dir):
         try:
