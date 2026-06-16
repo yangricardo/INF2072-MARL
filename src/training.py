@@ -22,6 +22,17 @@ from .environment import WarehouseEnv
 from .evaluation import evaluate_and_record_video, plot_consolidated_results
 
 
+def _should_optimize(agent, config):
+    """Verifica se optimize() fará trabalho útil antes de submeter ao pool."""
+    if len(agent.memory) < config.BATCH_SIZE:
+        return False
+    if agent.steps_done < config.LEARNING_STARTS:
+        return False
+    if (agent.learning_steps + 1) % config.TRAIN_FREQ != 0:
+        return False
+    return True
+
+
 def train_session(session_dir, agents, config, session_id=1, start_episode=0):
     """Executa uma sessão de treinamento com tratamento de erros robusto."""
 
@@ -54,6 +65,8 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
     best_reward = -float("inf")
     # Background I/O pool — checkpoints and CSV writes don't block the train loop
     _io_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="io")
+    # Persistent optimize pool — created once, reused across all steps
+    _optimize_pool = ThreadPoolExecutor(max_workers=len(agents), thread_name_prefix="opt")
 
     print(f"\n🚀 Iniciando sessão {session_id:04d}")
     print(f"   Episódios: {start_episode} → {total_episodes}")
@@ -80,9 +93,13 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
 
             episode_collisions = info["collisions"]
 
-            # Optimize each agent independently — parallel when buffer is ready
-            with ThreadPoolExecutor(max_workers=len(agents)) as ex:
-                futures = [ex.submit(agent.optimize) for agent in agents]
+            # Optimize each agent in parallel — only submit when there's real work
+            futures = [
+                _optimize_pool.submit(agent.optimize)
+                for agent in agents
+                if _should_optimize(agent, config)
+            ]
+            if futures:
                 wait(futures)
 
             obs = next_obs
