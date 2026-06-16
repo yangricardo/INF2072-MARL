@@ -10,6 +10,7 @@ observação por-robô (``_get_observation_for_robot``) e o crítico o estado gl
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 
 import numpy as np
@@ -221,11 +222,15 @@ def run(config=None, num_sessions=1, record_video=True):
         info = env._get_info()
         for step in range(config.MAX_STEPS):
             local_obs = [env._get_observation_for_robot(i) for i in range(n_agents)]
-            actions, log_probs = [], []
-            for i, agent in enumerate(agents):
-                action, log_prob = agent.select_action(local_obs[i], global_state, training=True)
-                actions.append(action)
-                log_probs.append(log_prob)
+
+            # select_action in parallel — each agent has independent network and state
+            with ThreadPoolExecutor(max_workers=n_agents) as ex:
+                results = list(ex.map(
+                    lambda t: t[0].select_action(t[1], t[2], training=True),
+                    [(agents[i], local_obs[i], global_state) for i in range(n_agents)],
+                ))
+            actions = [r[0] for r in results]
+            log_probs = [r[1] for r in results]
 
             _, rewards, terminated, truncated, info = env.step(actions)
             done = terminated or truncated
@@ -238,8 +243,10 @@ def run(config=None, num_sessions=1, record_video=True):
             if done:
                 break
 
-        for agent in agents:
-            agent.update()
+        # PPO update in parallel — each agent has independent actor + critic
+        with ThreadPoolExecutor(max_workers=n_agents) as ex:
+            futures = [ex.submit(agent.update) for agent in agents]
+            wait(futures)
 
         metrics["episode_rewards"].append(ep_reward)
         metrics["episode_deliveries"].append(info["total_deliveries"])
