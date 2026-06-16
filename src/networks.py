@@ -111,7 +111,8 @@ class QMixer(nn.Module):
     def forward(self, agent_qs, states):
         batch_size = agent_qs.size(0)
 
-        # Ensure non-negativity of weights (monotonicity constraint for QMIX)
+        # QMIX monotonic mixing: Q_tot(s,q) = w2(s)^T · ReLU(W1(s)·q + b1(s)) + b2(s)
+        # where w1, w2 >= 0 (via abs()) ensures ∂Q_tot/∂Q_i >= 0 ∀i (monotonicity)
         w1 = torch.abs(self.hyper_w1(states)).view(batch_size, self.hidden_dim, self.n_agents)
         b1 = self.hyper_b1(states).view(batch_size, self.hidden_dim, 1)
 
@@ -143,6 +144,7 @@ class ActorNetwork(nn.Module):
 
     def forward(self, x):
         logits = self.network(x)
+        # π(a|s) = softmax(logits); softmax(x)_i = exp(x_i) / Σ_j exp(x_j)
         return F.softmax(logits, dim=-1), logits
 
 
@@ -203,6 +205,7 @@ class ImprovedActorNetwork(nn.Module):
             x = self.activation(layer(x))
             x = self.layer_norms[i + 1](x)
             x = self.dropout(x)
+            # Residual connection: x_{l+1} = x_l + f_l(x_l)
             x = x + residual
         logits = self.output_layer(x)
         return F.softmax(logits, dim=-1), logits
