@@ -979,6 +979,44 @@ class BaseConfig:
 
 ---
 
+## 🆕 Fase 8 — Bugs de Runtime e Device Unificado (2026-06-16)
+
+### B9 — `RandomAgent` sem atributo `memory`
+
+**Severidade**: 🟠 ALTO — **✅ CORRIGIDO**  
+**Arquivo**: `src/agents/random_agent.py`
+
+`_should_optimize()` em `training.py:33` chama `len(agent.memory)`, mas `RandomAgent` não tem `memory`. Correção: adicionado `self.memory = []` ao `__init__`.
+
+---
+
+### B10 — `torch._foreach_lerp_()` em leaf variables com `requires_grad=True`
+
+**Severidade**: 🟠 ALTO — **✅ CORRIGIDO**  
+**Arquivos**: `idqn.py`, `vdn.py`, `hatrpo.py`, `qmix.py`
+
+`torch._foreach_lerp_()` é in-place em parâmetros com `requires_grad=True`. Correção: envolver com `torch.no_grad()` em todas as chamadas.
+
+---
+
+### B11 — QMIX: `backward()` através de grafo já liberado
+
+**Severidade**: 🟠 ALTO — **✅ CORRIGIDO**  
+**Arquivo**: `src/agents/qmix.py`
+
+`loss.backward()` libera o grafo antes do `agent_loss.backward()`. Correção: `loss.backward(retain_graph=True)`.
+
+---
+
+### M5 — Device unificado com suporte CUDA/MPS/CPU
+
+**Severidade**: 🟡 MÉDIO — **✅ CORRIGIDO**  
+**Arquivo**: `src/config.py` + todos os agents
+
+Device centralizado via `DEVICE = get_device()` com detecção automática CUDA → MPS → CPU. Todos os agents agora usam `from ..config import DEVICE`.
+
+---
+
 ## 🆕 Fase 7 — Lacunas de Implementação e Otimização (2026-06-16)
 
 ### N9 — `_optimize_pool.shutdown()` ausente — threads não liberadas entre sessões
