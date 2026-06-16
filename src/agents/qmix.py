@@ -87,13 +87,12 @@ class QMIXAgent:
         return self.target_net(states_tensor)
 
     def soft_update_target(self):
-        for target_param, policy_param in zip(
-            self.target_net.parameters(), self.policy_net.parameters()
-        ):
-            target_param.data.copy_(
-                self.config.TAU * policy_param.data
-                + (1 - self.config.TAU) * target_param.data
-            )
+        # Polyak averaging (soft update) — vetorizado via _foreach_lerp_
+        torch._foreach_lerp_(
+            list(self.target_net.parameters()),
+            list(self.policy_net.parameters()),
+            self.config.TAU,
+        )
 
 
 class QMIXTrainer:
