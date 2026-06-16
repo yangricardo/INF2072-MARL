@@ -56,7 +56,7 @@ class PrioritizedReplayBuffer:
 
     def update_priorities(self, indices, td_errors):
         for idx, td_error in zip(indices, td_errors):
-            self.priorities[idx] = abs(td_error) + 1e-6
+            self.priorities[idx] = (abs(td_error) + 1e-6) ** self.alpha
 
     def __len__(self):
         return len(self.buffer)
@@ -106,10 +106,10 @@ class VDNPrioritizedReplayBuffer:
 
     def update_priorities(self, indices, td_errors):
         for idx, err in zip(indices, td_errors):
-            p = (abs(err) + 1e-6) ** self.alpha
-            self.priorities[idx] = p
-            if p > self._max_priority:
-                self._max_priority = p
+            p_raw = abs(err) + 1e-6  # store raw value (without alpha)
+            self.priorities[idx] = p_raw ** self.alpha  # apply alpha only when storing
+            if p_raw > self._max_priority:
+                self._max_priority = p_raw  # store raw max priority
 
     def __len__(self):
         return len(self.buffer)
@@ -175,7 +175,7 @@ class QMIXPrioritizedReplayBuffer:
 
     def update_priorities(self, indices, td_errors):
         for idx, td_error in zip(indices, td_errors):
-            self.priorities[idx] = abs(td_error) + 1e-6
+            self.priorities[idx] = (abs(td_error) + 1e-6) ** self.alpha
 
     def __len__(self):
         return len(self.buffer)
