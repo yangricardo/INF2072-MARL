@@ -1,9 +1,15 @@
-"""Ambiente Warehouse multi-agente (porta 1:1 da versão simples v1.3.0).
+"""Ambiente Warehouse multi-agente (porta da versão simples v1.3.0).
+
+Extraído de: Código/Ambiente e Execução IDQN - Versão 1.3.0.py (classe WarehouseEnv).
 
 Dois robôs numa grade devem pegar as caixas (``A``) e entregá-las nos alvos
 (``B``). Esta variante **não** inclui falhas de atuação nem barreiras dinâmicas
 (essas existem apenas nos experimentos em notebook). Mantém a captura de frame
 de vídeo já corrigida (``buffer_rgba``).
+
+Além da observação global compartilhada (``_get_observation``), oferece infra para
+algoritmos de crítico centralizado: ``_get_global_state`` (estado global) e
+``_get_observation_for_robot`` (observação local distinta por robô).
 """
 
 import numpy as np
@@ -14,11 +20,14 @@ from matplotlib.patches import Rectangle
 
 from .config import MAP_CONFIG, IDQNConfig
 
+# Número de ações por robô: 4 movimentos + pegar + soltar.
+NUM_ACTIONS = 6
+
 
 class WarehouseEnv(gym.Env):
     metadata = {"render.modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, render_mode: str = None, seed: int = None, config=None):
+    def __init__(self, render_mode: str | None = None, seed: int | None = None, config=None):
         super().__init__()
 
         self.config = config or IDQNConfig()
@@ -26,24 +35,25 @@ class WarehouseEnv(gym.Env):
         self.width = MAP_CONFIG["width"]
         self.grid = [row[:] for row in MAP_CONFIG["grid"]]
 
-        self.robot_positions = None
-        self.box_positions = None
+        self.robot_positions: list[tuple[int, int]] = []
+        self.box_positions: list[tuple[int, int] | None] = []
         self.targets = self._find_positions("B")
 
         self.num_robots = 2
         self.num_boxes = len(self._find_positions("A"))
         self.num_targets = len(self.targets)
+        self.num_actions = NUM_ACTIONS
 
-        self.delivered_boxes = None
+        self.delivered_boxes: list[bool] = []
         self.steps = 0
         self.max_steps = self.config.MAX_STEPS
         self.total_deliveries = 0
         self.collisions = 0
         self.distance_traveled = [0, 0]
-        self.previous_distances = None
+        self.previous_distances: list[int] = []
 
         self.action_space = spaces.Tuple(
-            [spaces.Discrete(6) for _ in range(self.num_robots)]
+            [spaces.Discrete(NUM_ACTIONS) for _ in range(self.num_robots)]
         )
 
         # robôs (x,y) + caixas (x,y) + alvos (x,y) + 2 features de distância por robô
@@ -78,7 +88,7 @@ class WarehouseEnv(gym.Env):
         torch.manual_seed(seed)
         return [seed]
 
-    def _find_positions(self, symbols):
+    def _find_positions(self, symbols) -> list[tuple[int, int]]:
         if isinstance(symbols, str):
             symbols = [symbols]
         positions = []
@@ -89,13 +99,14 @@ class WarehouseEnv(gym.Env):
                     positions.append((i, j))
         return positions
 
-    def reset(self, seed=None, options=None):
+    def reset(self, *, seed=None, options=None):
         if seed is not None:
             self.seed(seed)
 
         self.grid = [row[:] for row in MAP_CONFIG["grid"]]
         self.robot_positions = self._find_positions("R")
-        self.box_positions = self._find_positions("A")
+        # list comprehension para o pyright inferir o tipo-união (vira None após pickup)
+        self.box_positions = [pos for pos in self._find_positions("A")]
         self.delivered_boxes = [False] * self.num_boxes
 
         self.steps = 0
@@ -260,7 +271,26 @@ class WarehouseEnv(gym.Env):
 
         return np.array(obs, dtype=np.float32)
 
-    def step(self, actions):
+    def _get_global_state(self):
+        """Estado global para críticos centralizados (QMIX/MAPPO/HATRPO).
+
+        A observação completa já codifica o estado do armazém, então serve como
+        estado global compartilhado.
+        """
+        return self._get_observation()
+
+    def _get_observation_for_robot(self, robot_id):
+        """Observação local distinta por robô: estado global + one-hot do id.
+
+        Permite que algoritmos com obs por-agente diferenciem os robôs mesmo
+        usando o mesmo estado global de base.
+        """
+        base = self._get_observation()
+        one_hot = np.zeros(self.num_robots, dtype=np.float32)
+        one_hot[robot_id] = 1.0
+        return np.concatenate([base, one_hot]).astype(np.float32)
+
+    def step(self, actions):  # type: ignore[override]  # MARL: rewards é lista por agente
         self.steps += 1
 
         if len(actions) != self.num_robots:
@@ -308,6 +338,8 @@ class WarehouseEnv(gym.Env):
             "total_deliveries": self.total_deliveries,
             "collisions": self.collisions,
             "distance_traveled": self.distance_traveled.copy(),
+            # métrica zerada (sem mecanismo de falhas) p/ compat. com código portado
+            "failures": [0, 0],
             "remaining_boxes": sum(1 for d in self.delivered_boxes if not d),
             "success_rate": self.total_deliveries / self.num_boxes
             if self.steps > 0
@@ -329,14 +361,14 @@ class WarehouseEnv(gym.Env):
 
         try:
             # Método mais recente do matplotlib
-            buffer = fig.canvas.buffer_rgba()
+            buffer = fig.canvas.buffer_rgba()  # type: ignore[attr-defined]
             img = np.asarray(buffer)
             img = img[:, :, :3]  # remove canal alpha
         except AttributeError:
             # Fallback para versões antigas
             fig.canvas.draw()
             w, h = fig.canvas.get_width_height()
-            img = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
+            img = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)  # type: ignore[attr-defined]
             img = img.reshape(h, w, 4)[:, :, :3]
 
         plt.close(fig)
