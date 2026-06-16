@@ -1,0 +1,26 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# ===== Sistema operacional =====
+.DS_Store
+
+# ===== Artefatos de treino (não versionar binários) =====
+*.pth
+*.pkl
+*.mp4
+*.png
+
+# Diretórios de resultados gerados pelos experimentos
+resultados_*/
+*_results_*/
+animacao_*_frames/
+
+# Modelos e saídas
+Modelos/
+Output/
