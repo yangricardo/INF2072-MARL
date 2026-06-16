@@ -23,12 +23,16 @@ from .evaluation import evaluate_and_record_video, plot_consolidated_results
 
 
 def _should_optimize(agent, config):
-    """Verifica se optimize() fará trabalho útil antes de submeter ao pool."""
+    """Verifica se optimize() fará trabalho útil antes de submeter ao pool.
+
+    Apenas verifica pré-condições (buffer size e learning starts). Não replica
+    TRAIN_FREQ — o método optimize() do agente gerencia sua própria frequência
+    internamente (incrementa learning_steps e verifica o módulo), como no
+    código original (Ambiente e Execução IDQN - Versão 1.3.0.py).
+    """
     if len(agent.memory) < config.BATCH_SIZE:
         return False
     if agent.steps_done < config.LEARNING_STARTS:
-        return False
-    if (agent.learning_steps + 1) % config.TRAIN_FREQ != 0:
         return False
     return True
 
