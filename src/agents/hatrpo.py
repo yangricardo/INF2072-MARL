@@ -19,6 +19,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+from tqdm import tqdm
 
 from ..config import HATRPOConfig
 from ..environment import WarehouseEnv
@@ -232,7 +233,7 @@ def run(config=None, num_sessions=1, record_video=True):
         "collisions": [],
     }
 
-    for ep in range(total_episodes):
+    for ep in tqdm(range(total_episodes), desc="HATRPO"):
         env.reset()
         all_states = np.stack([env._get_observation_for_robot(i) for i in range(n_agents)])
         global_state = env._get_global_state()
