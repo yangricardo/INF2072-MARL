@@ -159,11 +159,13 @@ class CentralizedCriticOptimized:
 
         # Polyak averaging soft update for target critic — vetorizado via _foreach_lerp_
         # θ_target ← (1-τ)·θ_target + τ·θ
-        torch._foreach_lerp_(
-            list(self.critic_target.parameters()),
-            list(self.critic.parameters()),
-            self.config.TAU,
-        )
+        # B10: torch.no_grad() necessário pois _foreach_lerp_ é in-place em leaf tensors
+        with torch.no_grad():
+            torch._foreach_lerp_(
+                list(self.critic_target.parameters()),
+                list(self.critic.parameters()),
+                self.config.TAU,
+            )
 
         return critic_loss.item()
 
