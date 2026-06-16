@@ -9,7 +9,6 @@ baseline aleatório.
 """
 
 from concurrent.futures import ThreadPoolExecutor
-from functools import cached_property
 
 import imageio
 import matplotlib.pyplot as plt
