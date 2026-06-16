@@ -1254,3 +1254,38 @@ pegar→atravessar o labirinto→soltar no alvo.
 > meta). Se quiser margem (≥4 = ~67%), basta manter 6 caixas (alterar 2 células de `A` no `MAP_CONFIG`).
 > Carga múltipla por robô (reduziria viagens) fica como alternativa futura — exige mudar `robot_carrying`
 > de `int|None` para contagem/lista e o flag de inventário da observação.
+
+---
+
+## 🔴 Fase 11 — Revisão do MAPPO + migração canônica (2026-06-16)
+
+**Sintoma**: nos CSVs, o MAPPO **colapsava para 0 entregas** nos últimos 200 episódios (média geral 0.51,
+máx 2). Além disso, a versão anterior **nem instanciava** com o `MAPPOConfig` atual.
+
+### Achados
+
+| ID   | Local                          | Problema                                                                                                                                                                                 | Sev. | Status |
+| ---- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------ |
+| MP0  | `mappo.py:54` + `config.py`    | **Crash on launch**: `MAPPOAgent.__init__` lia `config.EPSILON_START`, mas o campo foi removido do `MAPPOConfig` → `AttributeError` ao instanciar (reproduzido). MAPPO não rodava mais.   | 🔴 CRÍTICO | ✅ |
+| MP1  | `compute_gae` + loop           | **Truncation tratado como termination**: último passo forçava `next_value=0` e guardava `done=terminated or truncated`. Como o env quase sempre trunca em 500, todo episódio zerava o bootstrap → alvos de valor enviesados → vantagens ruins → colapso. | 🔴 CRÍTICO | ✅ |
+| MP2  | `mappo.py:39`                  | **Crítico por-agente** em vez de um crítico centralizado único compartilhado (não era o "C" de MAPPO).                                                                                    | 🟠 ALTO | ✅ |
+| MP3  | `mappo.py:62-71, 296`          | **Avaliação estocástica**: `select_action(training=False)` ainda amostrava da `Categorical` (deveria ser `argmax`); `training` ignorado e `steps_done` mutado na avaliação.               | 🟠 ALTO | ✅ |
+| MP4  | `mappo.py:226-259`             | **Rollout de 1 episódio × 10 epochs**, sem value-clipping nem early-stop por KL → alta variância / over-update.                                                                           | 🟠 ALTO | ✅ |
+| MP5  | `mappo.py:109`                 | Guard `LEARNING_STARTS` descartaria trajetória on-policy se ativado (inócuo: `MAPPOConfig` não define o campo).                                                                           | 🟢 BAIXO | ✅ (removido) |
+| MP6  | `mappo.py:52-60, 238-242`      | Epsilon **dead code** (N12) e `ThreadPoolExecutor` por step para um MLP minúsculo (overhead, igual ao I8 do IDQN).                                                                        | 🟢 BAIXO | ✅ |
+
+### Correção — `src/agents/mappo.py` reescrito como `MAPPOController` (MAPPO canônico, Yu et al. 2022)
+
+| Aspecto | Antes (por-agente) | Depois (canônico) |
+| ------- | ------------------ | ----------------- |
+| Ator    | 1 por agente       | **1 ator compartilhado** (parameter sharing; obs traz id one-hot + flag de inventário) |
+| Crítico | 1 por agente       | **1 crítico centralizado único** `V(s_global)` |
+| Reward  | por-agente         | **team reward** `Σ_i r_i`; vantagem `A_t` compartilhada entre os agentes |
+| GAE     | trunc.=term., `next_value=0` | bootstrap correto: `V(s_T)` no timeout, `(1−terminated)` |
+| Update  | 1 ep × 10 epochs   | rollout de `ROLLOUT_EPISODES` (4) × PPO epochs, **value-clipping** + early-stop por `TARGET_KL` |
+| Eval    | estocástico        | **argmax** determinístico, sem mutar `steps_done` |
+| Ação    | threads/agente     | **1 forward batched** nos n agentes; sem ThreadPoolExecutor |
+
+Também: `config.py` ganhou `ROLLOUT_EPISODES=4` e `TARGET_KL=0.02`; `agents/__init__.py` exporta
+`MAPPOController` (antes `MAPPOAgent`). Interface `mappo.run(config, num_sessions, record_video)` preservada
+(`main.py` inalterado). Smoke de 30 ep roda e grava vídeo sem erro; validação de tendência (600 ep) em `out/mappo_fix`.

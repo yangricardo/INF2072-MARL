@@ -3,7 +3,7 @@
 from . import hatrpo, mappo, qmix, vdn
 from .hatrpo import CentralizedCriticOptimized, HATRPOAgentOptimized
 from .idqn import IDQNAgent
-from .mappo import MAPPOAgent
+from .mappo import MAPPOController
 from .qmix import QMIXAgent, QMIXTrainer
 from .random_agent import RandomAgent
 from .vdn import VDNController
@@ -14,7 +14,7 @@ __all__ = [
     "VDNController",
     "QMIXAgent",
     "QMIXTrainer",
-    "MAPPOAgent",
+    "MAPPOController",
     "HATRPOAgentOptimized",
     "CentralizedCriticOptimized",
     "vdn",

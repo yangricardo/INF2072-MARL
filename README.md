@@ -23,7 +23,7 @@ src/
 │   ├── random_agent.py  # RandomAgent (baseline)
 │   ├── vdn.py           # VDNController (Q_total = Q1 + Q2) + runner
 │   ├── qmix.py          # QMIXAgent + QMixer + QMIXTrainer + runner
-│   ├── mappo.py         # MAPPOAgent (PPO, crítico centralizado) + runner
+│   ├── mappo.py         # MAPPOController (PPO canônico, crítico centralizado) + runner
 │   └── hatrpo.py        # HATRPOAgent + crítico centralizado + runner
 ├── training.py          # loop value-based multi-sessão (IDQN/Random)
 ├── evaluation.py        # gravação de vídeo + gráficos consolidados
@@ -173,7 +173,7 @@ MLP de 2 camadas ocultas (256 unidades, ReLU). Saída: `softmax` sobre as açõe
 
 ### CriticNetwork — usada por MAPPO
 
-MLP de 2 camadas (256 unidades). Entrada: estado global (22-dim). Saída: valor escalar V(s).
+MLP de 2 camadas (256 unidades). Entrada: estado global (24-dim). Saída: valor escalar V(s). No MAPPO, um **único** crítico é compartilhado por todos os agentes (centralizado).
 
 ### ImprovedActorNetwork — usada por HATRPO
 
@@ -365,18 +365,19 @@ Por agente: loss contrafactual ([`qmix.py` linha 169](src/agents/qmix.py#L169)) 
 
 > Implementação: [src/agents/mappo.py](src/agents/mappo.py)
 
-**O que é:** Extensão multi-agente do PPO (_Proximal Policy Optimization_) no paradigma CTDE. Cada agente possui um **ator individual** (política descentralizada); um **crítico centralizado** compartilha o estado global para estimar V(s) durante o treinamento.
+**O que é:** Extensão multi-agente do PPO (_Proximal Policy Optimization_) no paradigma CTDE. Implementação **canônica** (Yu et al. 2022) com **parameter sharing**: um **ator compartilhado** (política descentralizada, executada por cada robô a partir da sua obs por-robô) e um **único crítico centralizado** que estima V(s) sobre o estado global durante o treinamento.
 
 **Como funciona:**
 
-- `MAPPOAgent` contém `ActorNetwork` (entrada: obs local 24-dim) e `CriticNetwork` (entrada: estado global 22-dim), com otimizadores Adam separados.
-- **Coleta:** por episódio, armazena estados locais, ações, log-probs, recompensas e estados globais.
+- `MAPPOController` mantém **um** `ActorNetwork` compartilhado (entrada: obs por-robô 27-dim, com one-hot de id + flag de inventário para quebrar simetria) e **um** `CriticNetwork` centralizado (entrada: estado global 24-dim), com otimizadores Adam separados.
+- **Recompensa de equipe:** as recompensas por-robô são somadas (`r_team = Σ_i r_i`) e a vantagem `Â_t` é compartilhada entre os agentes naquele passo.
+- **Coleta:** acumula `ROLLOUT_EPISODES` episódios por atualização (reduz a variância vs. atualizar a cada episódio), guardando obs por-robô, ações, log-probs, estados globais, team rewards e V(s_t).
 
-**Atualização pós-episódio:**
+**Atualização (a cada rollout de ROLLOUT_EPISODES):**
 
-**1.** Computa V(s) com o crítico centralizado.
+**1.** Computa V(s) com o crítico centralizado único.
 
-**2. GAE** — Generalized Advantage Estimation (Schulman et al. 2016) — [`mappo.py` linhas 86–96](src/agents/mappo.py#L86-L96):
+**2. GAE** — Generalized Advantage Estimation (Schulman et al. 2016), com **bootstrap correto de _truncation_** (no timeout usa `V(s_T)`; o valor futuro só é zerado em terminal real — todas as caixas entregues):
 
 ```math
 \delta_t = r_t + \gamma\,V(s_{t+1})(1-d_t) - V(s_t)
@@ -394,7 +395,7 @@ Por agente: loss contrafactual ([`qmix.py` linha 169](src/agents/qmix.py#L169)) 
 \hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}
 ```
 
-**3. PPO_EPOCHS=10** repetições com mini-batches de 32 — [`mappo.py` linhas 140–156](src/agents/mappo.py#L140-L156):
+**3. PPO** — `PPO_EPOCHS` repetições com mini-batches de `MINI_BATCH_SIZE`, razão clipada + bônus de entropia (ator compartilhado):
 
 ```math
 r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}
@@ -412,24 +413,28 @@ r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid
 H[\pi] = -\sum_{a}\pi(a \mid s)\log\pi(a \mid s)
 ```
 
+**Crítico com _value-clipping_** (PPO) — `V` é clipado em torno de `V_old ± ε` e a loss usa o pior caso, evitando saltos grandes em V(s):
+
 ```math
-\mathcal{L}_{\text{critic}} = \mathbb{E}\!\left[\bigl(V(s) - \hat{R}_t\bigr)^2\right]
+\mathcal{L}_{\text{critic}} = \tfrac{1}{2}\,\mathbb{E}\!\left[\max\!\bigl((V - \hat{R})^2,\,(V^{\text{clip}} - \hat{R})^2\bigr)\right],\quad V^{\text{clip}} = V_{\text{old}} + \mathrm{clip}(V - V_{\text{old}}, -\varepsilon, +\varepsilon)
 ```
 
-**4.** Clip de gradiente em 0,5 para ator e crítico. Decaimento multiplicativo de epsilon: $\varepsilon \leftarrow \varepsilon \times 0.995$ por episódio.
+**4.** Clip de gradiente (`MAX_GRAD_NORM=0.5`) para ator e crítico; **early-stop por KL aproximado** (`TARGET_KL`) interrompe as épocas se a política divergir demais (proteção anti-colapso). A exploração vem da entropia da política `Categorical` — **sem** epsilon-greedy.
 
 **Hiperparâmetros principais:**
 
 | Parâmetro       | Valor |
 | --------------- | ----- |
 | Actor LR        | 3e-4  |
-| Critic LR       | 3e-4  |
+| Critic LR       | 1e-3  |
 | γ (desconto)    | 0,99  |
 | λ (GAE)         | 0,95  |
 | PPO clip ε      | 0,2   |
-| Entropia coef.  | 0,01  |
+| Entropia coef.  | 0,02  |
 | PPO epochs      | 10    |
 | Mini-batch size | 32    |
+| Rollout (ep/update) | 4 |
+| Target KL       | 0,02  |
 
 **Referência:**
 
