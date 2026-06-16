@@ -1,0 +1,185 @@
+"""Agente IDQN (Independent Deep Q-Network).
+
+Porta de ``OptimizedIDQNAgent`` da v1.3.0: Double-DQN com prioritized replay,
+soft update da target network e exploração epsilon-greedy decrescente.
+"""
+
+import os
+import random
+from collections import deque
+
+import numpy as np
+import torch
+import torch.optim as optim
+
+from ..networks import ImprovedDQN
+from ..replay_buffer import PrioritizedReplayBuffer
+
+
+class IDQNAgent:
+    def __init__(self, state_dim, action_dim, agent_id, config):
+        self.agent_id = agent_id
+        self.action_dim = action_dim
+        self.config = config
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.policy_net = ImprovedDQN(
+            state_dim, action_dim, config.HIDDEN_DIM, config.DROPOUT_RATE
+        ).to(self.device)
+        self.target_net = ImprovedDQN(
+            state_dim, action_dim, config.HIDDEN_DIM, config.DROPOUT_RATE
+        ).to(self.device)
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+
+        self.optimizer = optim.Adam(
+            self.policy_net.parameters(),
+            lr=config.LEARNING_RATE,
+            weight_decay=config.WEIGHT_DECAY,
+        )
+
+        if config.PRIORITIZED_REPLAY:
+            self.memory = PrioritizedReplayBuffer(config.BUFFER_SIZE, alpha=config.ALPHA)
+        else:
+            self.memory = deque(maxlen=config.BUFFER_SIZE)
+
+        self.steps_done = 0
+        self.learning_steps = 0
+        self.total_episodes = 0
+        self.losses = []
+
+    def get_epsilon(self):
+        if self.steps_done >= self.config.EPSILON_DECAY_STEPS:
+            return self.config.EPSILON_END
+
+        epsilon = self.config.EPSILON_START - (
+            self.config.EPSILON_START - self.config.EPSILON_END
+        ) * self.steps_done / self.config.EPSILON_DECAY_STEPS
+        return max(self.config.EPSILON_END, epsilon)
+
+    def select_action(self, state, training=True):
+        self.steps_done += 1
+
+        if training and random.random() < self.get_epsilon():
+            return random.randrange(self.action_dim)
+
+        with torch.no_grad():
+            state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+            q_values = self.policy_net(state_tensor)
+            return q_values.argmax().item()
+
+    def remember(self, state, action, reward, next_state, done):
+        if self.config.PRIORITIZED_REPLAY:
+            self.memory.push(state, action, reward, next_state, done)
+        else:
+            self.memory.append((state, action, reward, next_state, done))
+
+    def optimize(self):
+        if (
+            len(self.memory) < self.config.BATCH_SIZE
+            or self.steps_done < self.config.LEARNING_STARTS
+        ):
+            return 0
+
+        self.learning_steps += 1
+
+        if self.learning_steps % self.config.TRAIN_FREQ != 0:
+            return 0
+
+        if self.config.PRIORITIZED_REPLAY:
+            (
+                states,
+                actions,
+                rewards,
+                next_states,
+                dones,
+                indices,
+                weights,
+            ) = self.memory.sample(self.config.BATCH_SIZE)
+            weights = torch.FloatTensor(weights).to(self.device)
+        else:
+            batch = random.sample(self.memory, self.config.BATCH_SIZE)
+            states, actions, rewards, next_states, dones = zip(*batch)
+            indices = None
+
+        states = torch.FloatTensor(np.array(states)).to(self.device)
+        actions = torch.LongTensor(np.array(actions)).to(self.device)
+        rewards = torch.FloatTensor(np.array(rewards)).to(self.device)
+        next_states = torch.FloatTensor(np.array(next_states)).to(self.device)
+        dones = torch.FloatTensor(np.array(dones)).to(self.device)
+
+        with torch.no_grad():
+            next_actions = self.policy_net(next_states).argmax(1, keepdim=True)
+            next_q_values = (
+                self.target_net(next_states).gather(1, next_actions).squeeze()
+            )
+            target_q = rewards + self.config.GAMMA * next_q_values * (1 - dones)
+
+        current_q = self.policy_net(states).gather(1, actions.unsqueeze(1)).squeeze()
+
+        td_errors = target_q - current_q
+
+        if self.config.PRIORITIZED_REPLAY:
+            loss = (weights * td_errors.pow(2)).mean()
+        else:
+            loss = td_errors.pow(2).mean()
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            self.policy_net.parameters(), self.config.MAX_GRAD_NORM
+        )
+        self.optimizer.step()
+
+        if self.config.PRIORITIZED_REPLAY and indices is not None:
+            priorities = td_errors.abs().detach().cpu().numpy() + 1e-6
+            self.memory.update_priorities(indices, priorities)
+
+        if self.config.USE_SOFT_UPDATE:
+            self.soft_update_target()
+
+        self.losses.append(loss.item())
+        return loss.item()
+
+    def soft_update_target(self):
+        for target_param, policy_param in zip(
+            self.target_net.parameters(), self.policy_net.parameters()
+        ):
+            target_param.data.copy_(
+                self.config.TAU * policy_param.data
+                + (1 - self.config.TAU) * target_param.data
+            )
+
+    def save_checkpoint(self, save_dir):
+        try:
+            os.makedirs(save_dir, exist_ok=True)
+            torch.save(
+                {
+                    "policy_net": self.policy_net.state_dict(),
+                    "target_net": self.target_net.state_dict(),
+                    "optimizer": self.optimizer.state_dict(),
+                    "steps_done": self.steps_done,
+                    "learning_steps": self.learning_steps,
+                    "total_episodes": self.total_episodes,
+                },
+                save_dir / f"agent_{self.agent_id}.pth",
+            )
+            return True
+        except Exception as e:
+            print(f"  ⚠️ Erro ao salvar checkpoint do agente {self.agent_id}: {e}")
+            return False
+
+    def load_checkpoint(self, load_dir, agent_id):
+        try:
+            checkpoint_path = load_dir / f"agent_{agent_id}.pth"
+            if checkpoint_path.exists():
+                checkpoint = torch.load(checkpoint_path, map_location=self.device)
+                self.policy_net.load_state_dict(checkpoint["policy_net"])
+                self.target_net.load_state_dict(checkpoint["target_net"])
+                self.optimizer.load_state_dict(checkpoint["optimizer"])
+                self.steps_done = checkpoint["steps_done"]
+                self.learning_steps = checkpoint["learning_steps"]
+                self.total_episodes = checkpoint["total_episodes"]
+                return True
+        except Exception as e:
+            print(f"  ⚠️ Erro ao carregar checkpoint do agente {agent_id}: {e}")
+        return False
