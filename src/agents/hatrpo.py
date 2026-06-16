@@ -82,7 +82,8 @@ class HATRPOAgentOptimized:
 
         ratio = torch.exp(new_log_probs - old_log_probs_tensor)
         surr1 = ratio * advantages_tensor
-        surr2 = torch.clamp(ratio, 0.8, 1.2) * advantages_tensor
+        clip_eps = self.config.CLIP_EPS
+        surr2 = torch.clamp(ratio, 1 - clip_eps, 1 + clip_eps) * advantages_tensor
         policy_loss = -torch.min(surr1, surr2).mean()
 
         entropy = -(probs * torch.log(probs + 1e-10)).sum(dim=1).mean()
@@ -138,10 +139,11 @@ class CentralizedCriticOptimized:
             torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.config.MAX_GRAD_NORM)
         self.critic_optimizer.step()
 
+        tau = self.config.TAU
         for target_param, param in zip(
             self.critic_target.parameters(), self.critic.parameters()
         ):
-            target_param.data.copy_(0.995 * target_param.data + 0.005 * param.data)
+            target_param.data.copy_((1 - tau) * target_param.data + tau * param.data)
 
         return critic_loss.item()
 
