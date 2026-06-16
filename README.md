@@ -203,10 +203,18 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - Cada `IDQNAgent` mantém uma `policy_net` e uma `target_net` (`ImprovedDQN`).
 - **Seleção de ação:** epsilon-greedy com decaimento linear de ε: 1,0 → 0,05 em 50 000 passos.
 - **Memória:** `PrioritizedReplayBuffer` (PER) com α=0,6, β=0,4 — transições mais surpreendentes (alto erro TD) são amostradas com maior frequência.
+  
+  **Prioridade e importance-sampling (PER):**
+  $$p_i = \frac{|\delta_i|^\alpha}{\sum_j |\delta_j|^\alpha}, \quad w_i = \frac{\bigl(N \cdot p_i\bigr)^{-\beta}}{\max_j w_j}$$
+  
 - **Atualização (Double DQN):** a `policy_net` seleciona a ação; a `target_net` avalia o valor. Isso reduz o viés de superestimação do Q-learning padrão.
-  - `y = r + γ · Q_target(s', argmax_a Q_policy(s', a)) · (1 - done)`
-  - `loss = mean(W · (y - Q_policy(s, a))²)`
-- **Soft update:** `θ_target = τ·θ_policy + (1-τ)·θ_target` com τ=0,001. Treino começa após 1 000 transições e ocorre a cada 4 passos.
+  
+  $$y_i = r_i + \gamma \, Q_{\theta^-}\!\left(s'_i,\, \arg\max_{a'} Q_\theta(s'_i, a')\right)(1-d_i)$$
+  $$\mathcal{L}(\theta) = \mathbb{E}_i\!\left[w_i\,\bigl(y_i - Q_\theta(s_i,a_i)\bigr)^2\right]$$
+  
+- **Soft update:** Polyak averaging com τ=0,001. Treino começa após 1 000 transições e ocorre a cada 4 passos.
+  
+  $$\theta^- \leftarrow \tau\,\theta + (1-\tau)\,\theta^-$$
 
 **Hiperparâmetros principais:**
 
@@ -236,10 +244,15 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 
 - `VDNController` centraliza ambas as redes (`policy_nets: ModuleList[AgentNet]`) num único otimizador Adam.
 - Transições **conjuntas** `(s, [a₁,a₂], [r₁,r₂], s', done)` são armazenadas no `VDNPrioritizedReplayBuffer`.
+- **Fatoração aditiva (VDN):**
+  $$Q_{\text{tot}}(\mathbf{s}, \mathbf{a}) = \sum_{i=1}^{n} Q_i(o_i, a_i)$$
+  
+- **Individual-Global-Max (IGM):** A fatoração aditiva garante que o argmax é decomponível:
+  $$\arg\max_{\mathbf{a}} Q_{\text{tot}} = \bigl(\arg\max_{a_1}Q_1,\; \arg\max_{a_2}Q_2\bigr)$$
+  
 - **Target (Double-DQN por agente):** a `policy_net` escolhe a ação greedy; a `target_net` avalia o valor.
-  - `Q_total_curr = Q₁(s,a₁) + Q₂(s,a₂)`
-  - `Q_total_target = Q₁_target(s',a₁*) + Q₂_target(s',a₂*)`
-  - `loss = mean(W · (r_total + γ·Q_total_target - Q_total_curr)²)`
+  $$y = \sum_i r_i + \gamma \sum_i \max_{a'_i} Q_i^-(o'_i,a'_i) \cdot (1-d)$$
+  
 - Learning rate com _cosine annealing_ ao longo de todos os episódios. Soft update das target nets com τ=0,005.
 
 **Hiperparâmetros principais:**
@@ -269,10 +282,17 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - Cada `QMIXAgent` mantém `policy_net` e `target_net` (ImprovedDQN).
 - O `QMixer` recebe Q-values individuais e o estado global; hiper-redes geram pesos W1, W2 ≥ 0 (via `abs()`) garantindo monotonicidade.
 - `QMIXPrioritizedReplayBuffer` armazena transições enriquecidas com estados globais: `(s, [a₁,a₂], [r₁,r₂], s', done, global_s, next_global_s)`.
+  
+- **Rede de mistura QMIX (dois-camadas com monotonicidade):**
+  $$Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \text{ReLU}\!\bigl(\mathbf{W}_1(s)\,\mathbf{q} + \mathbf{b}_1(s)\bigr) + b_2(s)$$
+  onde $\mathbf{W}_1, \mathbf{w}_2 \geq 0$ (aplicado via `abs()`) para garantir:
+  $$\frac{\partial Q_{\text{tot}}}{\partial Q_i} \geq 0 \quad \forall i$$
+  
 - **`QMIXTrainer.optimize()`:**
   1. `Q_total_curr = mixer([Q₁_curr, Q₂_curr], global_s)`
   2. `Q_total_target = target_mixer([Q₁_target_max, Q₂_target_max], next_global_s)`
-  3. `loss_mixer = mean(W · (target - Q_total_curr)²)` — backward no mixer.
+  3. Loss do mixer:
+     $$\mathcal{L}_{\text{mixer}} = \mathbb{E}\!\left[w\,\bigl(y - Q_{\text{tot}}^\theta(s,\mathbf{a})\bigr)^2\right], \quad y = \sum_i r_i + \gamma Q_{\text{tot}}^-(s',\mathbf{a}^*)$$
   4. Por agente: `loss_i = mean(W · (target - Q_total_curr).detach() · Qi_curr)` — **loss contrafactual** (similar ao COMA).
   5. Soft update das target nets individuais e do target mixer.
 
@@ -304,16 +324,17 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - **Coleta:** por episódio, armazena estados locais, ações, log-probs, recompensas e estados globais.
 - **Atualização pós-episódio por agente:**
   1. Computa V(s) com o crítico.
-  2. **GAE** (_Generalized Advantage Estimation_):
-     - δt = rt + γ·V(st+1)·(1−done) − V(st)
-     - At = δt + γ·λ·(1−done)·At+1, com λ=0,95
-     - Returns = A + V; normaliza vantagens.
+  2. **GAE** (_Generalized Advantage Estimation_, Schulman et al. 2016):
+     $$\hat{A}_t^{\text{GAE}(\gamma,\lambda)} = \sum_{l=0}^{T-t-1}(\gamma\lambda)^l\,\delta_{t+l}, \quad \delta_t = r_t + \gamma V(s_{t+1})(1-d_t) - V(s_t)$$
+     $$\hat{R}_t = \hat{A}_t + V(s_t) \quad \text{(Returns)}$$
+     Normalização: $\hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}$
   3. **PPO_EPOCHS=10** repetições com mini-batches de 32:
-     - `ratio = exp(log_π_new − log_π_old)`
-     - `actor_loss = −min(ratio·A, clip(ratio, 1−ε, 1+ε)·A) − 0,01·H` com ε=0,2
-     - `critic_loss = MSE(V(s), returns)`
+     $$r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)} = \exp(\log\pi_{\text{new}} - \log\pi_{\text{old}})$$
+     $$\mathcal{L}^{\text{CLIP}}(\theta) = \mathbb{E}_t\!\left[\min\!\left(r_t(\theta)\hat{A}_t,\; \text{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\,\hat{A}_t\right)\right]$$
+     $$\mathcal{L}(\theta) = \mathcal{L}^{\text{CLIP}} - c_H\,H[\pi_\theta], \quad H[\pi] = -\sum_{a} \pi(a|s)\log\pi(a|s)$$
+     $$\mathcal{L}_V = \mathbb{E}[(V(s) - \hat{R}_t)^2]$$
   4. Clip de gradiente em 0,5 para ator e crítico.
-- Decaimento multiplicativo de epsilon: ε \*= 0,995 por episódio.
+- Decaimento multiplicativo de epsilon: $\varepsilon \leftarrow \varepsilon \times 0.995$ por episódio.
 
 **Hiperparâmetros principais:**
 
@@ -344,11 +365,16 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - `CentralizedCriticOptimized`: `ImprovedCriticNetwork` (residual) com soft update (τ=0,005) da target; responsável pelo GAE.
 - `TrajectoryBuffer`: acumula a trajetória completa do episódio com estados achatados de ambos os agentes.
 - **Atualização pós-episódio:**
-  1. **Crítico:** `MSE(V(global_s), returns)` + soft update da target.
-  2. **Por agente (sequencial):** `update_actor(agent_states, agent_actions, advantages, old_log_probs)`:
-     - `ratio = exp(log_π_new − log_π_old)`
-     - Clip em **[0,8 ; 1,2]** — implementa a restrição de região de confiança via PPO clip (equivalente a limitar o KL com MAX_KL=0,02).
-     - `loss = −min(surr1, surr2) − 0,01·H`
+  1. **Crítico:** $\mathcal{L}_V = \mathbb{E}[(V(s) - \hat{R}_t)^2]$ + soft update da target:
+     $$\theta_{\text{target}} \leftarrow (1-\tau)\,\theta_{\text{target}} + \tau\,\theta$$
+  2. **Por agente (sequencial — HATRPO original de Kuba et al. 2021):**
+     $$\pi_i^{k+1} = \arg\max_{\pi_i} \mathbb{E}\!\left[A_i^{\boldsymbol{\mu}^k}(s,\mathbf{a})\right] \;\text{s.t.}\; \mathbb{E}_s\!\left[D_{\text{KL}}\!\left(\pi_i^k(\cdot|s)\,\|\,\pi_i(\cdot|s)\right)\right] \leq \delta$$
+     
+     _Implementação: usa PPO clip como aproximação ao trust-region KL:_
+     $$r_t(\theta_i) = \frac{\pi_{\theta_i}(a|s)}{\pi_{\theta_i^{\text{old}}}(a|s)}, \quad \text{clip em } [1-\epsilon, 1+\epsilon]$$
+     $$\mathcal{L}(\theta_i) = \mathbb{E}\!\left[\min\!\left(r_t\hat{A},\,\text{clip}(r_t,1-\epsilon,1+\epsilon)\hat{A}\right)\right] - c_H\,H[\pi_i]$$
+     
+     com ε=0,2 (equivalente a $\text{MAX\_KL} \approx 0,02$).
      - A cada `TARGET_UPDATE_FREQ=100` passos: `actor_old.load_state_dict(actor.state_dict())`
 
 **Hiperparâmetros principais:**
