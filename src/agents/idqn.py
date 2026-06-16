@@ -16,6 +16,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 
+from ..config import DEVICE
 from ..networks import ImprovedDQN
 from ..replay_buffer import PrioritizedReplayBuffer
 
@@ -25,7 +26,7 @@ class IDQNAgent:
         self.agent_id = agent_id
         self.action_dim = action_dim
         self.config = config
-        self.device = torch.device("cpu")
+        self.device = DEVICE
 
         self.policy_net = ImprovedDQN(
             state_dim, action_dim, config.HIDDEN_DIM, config.DROPOUT_RATE
