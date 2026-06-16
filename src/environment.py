@@ -46,7 +46,13 @@ class WarehouseEnv(gym.Env):
             [spaces.Discrete(6) for _ in range(self.num_robots)]
         )
 
-        obs_dim = (self.num_robots * 2) + (self.num_boxes * 2) + (self.num_targets * 2) + 8
+        # robôs (x,y) + caixas (x,y) + alvos (x,y) + 2 features de distância por robô
+        obs_dim = (
+            (self.num_robots * 2)
+            + (self.num_boxes * 2)
+            + (self.num_targets * 2)
+            + (self.num_robots * 2)
+        )
         self.observation_space = spaces.Box(
             low=-1,
             high=self.height + self.width,
