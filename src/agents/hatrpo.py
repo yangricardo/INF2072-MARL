@@ -162,13 +162,15 @@ class CentralizedCriticOptimized:
     def compute_gae(self, rewards, values, dones):
         # Generalized Advantage Estimation (GAE-λ): Â_t = Σ_{l≥0}(γλ)^l·δ_{t+l}
         # δ_t = r_t + γV(s_{t+1})(1-done) - V(s_t)
+        # Uses append+reverse instead of insert(0) to avoid O(n²)
         advantages = []
         gae = 0.0
         for t in reversed(range(len(rewards))):
             next_value = 0.0 if t == len(rewards) - 1 else values[t + 1]
             delta = rewards[t] + self.config.GAMMA * next_value * (1 - dones[t]) - values[t]
             gae = delta + self.config.GAMMA * self.config.LAMBDA * (1 - dones[t]) * gae
-            advantages.insert(0, gae)
+            advantages.append(gae)
+        advantages.reverse()
         advantages = np.array(advantages, dtype=np.float32)
         returns = advantages + np.array(values, dtype=np.float32)
         return advantages, returns
@@ -249,6 +251,9 @@ def run(config=None, num_sessions=1, record_video=True):
         "collisions": [],
     }
 
+    # Persistent ThreadPoolExecutor for select_action and update_actor — NOT created per step
+    _hatrpo_pool = ThreadPoolExecutor(max_workers=n_agents, thread_name_prefix="hatrpo")
+
     for ep in tqdm(range(total_episodes), desc="HATRPO"):
         env.reset()
         all_states = np.stack([env._get_observation_for_robot(i) for i in range(n_agents)])
@@ -260,11 +265,12 @@ def run(config=None, num_sessions=1, record_video=True):
 
         for step in range(config.MAX_STEPS):
             # select_action in parallel — each agent has independent network and state
-            with ThreadPoolExecutor(max_workers=n_agents) as ex:
-                results = list(ex.map(
-                    lambda t: t[0].select_action(t[1], training=True),
-                    [(agents[i], all_states[i]) for i in range(n_agents)],
-                ))
+            action_futures = [
+                _hatrpo_pool.submit(agents[i].select_action, all_states[i], True)
+                for i in range(n_agents)
+            ]
+            results = [f.result() for f in action_futures]
+            # results is list of (action, log_prob) tuples, one per agent
             actions = [r[0] for r in results]
             log_probs = [r[1] for r in results]
 
@@ -297,18 +303,17 @@ def run(config=None, num_sessions=1, record_video=True):
             # Critic must update before actors (provides the shared advantage estimate)
             critic.update(traj["global_states"], returns)
             # update_actor in parallel — each actor has independent network and optimizer
-            with ThreadPoolExecutor(max_workers=n_agents) as ex:
-                futures = [
-                    ex.submit(
-                        agents[i].update_actor,
-                        traj["states"][:, i * state_dim : (i + 1) * state_dim],
-                        traj["actions"][:, i],
-                        advantages,
-                        traj["log_probs"][:, i],
-                    )
-                    for i in range(n_agents)
-                ]
-                wait(futures)
+            update_futures = [
+                _hatrpo_pool.submit(
+                    agents[i].update_actor,
+                    traj["states"][:, i * state_dim : (i + 1) * state_dim],
+                    traj["actions"][:, i],
+                    advantages,
+                    traj["log_probs"][:, i],
+                )
+                for i in range(n_agents)
+            ]
+            wait(update_futures)
 
         metrics["episode_rewards"].append(ep_reward)
         metrics["episode_deliveries"].append(info["total_deliveries"])
