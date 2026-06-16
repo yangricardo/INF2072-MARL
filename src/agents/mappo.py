@@ -87,13 +87,15 @@ class MAPPOAgent:
     def compute_gae(self, rewards, values, dones):
         # Generalized Advantage Estimation (GAE-λ): Â_t = Σ_{l≥0}(γλ)^l·δ_{t+l}
         # δ_t = r_t + γV(s_{t+1})(1-done) - V(s_t)
+        # Uses append+reverse instead of insert(0) to avoid O(n²)
         advantages = []
         gae = 0.0
         for t in reversed(range(len(rewards))):
             next_value = 0.0 if t == len(rewards) - 1 else values[t + 1]
             delta = rewards[t] + self.config.GAMMA * next_value * (1 - dones[t]) - values[t]
             gae = delta + self.config.GAMMA * self.config.LAMBDA * (1 - dones[t]) * gae
-            advantages.insert(0, gae)
+            advantages.append(gae)
+        advantages.reverse()
         return torch.stack(advantages).to(self.device)
 
     def update(self, global_states_all=None):
@@ -212,6 +214,9 @@ def run(config=None, num_sessions=1, record_video=True):
         "collisions": [],
     }
 
+    # Persistent ThreadPoolExecutor for select_action and update — NOT created per step
+    _mappo_pool = ThreadPoolExecutor(max_workers=n_agents, thread_name_prefix="mappo")
+
     for ep in tqdm(range(total_episodes), desc="MAPPO"):
         env.reset()
         for agent in agents:
@@ -224,11 +229,11 @@ def run(config=None, num_sessions=1, record_video=True):
             local_obs = [env._get_observation_for_robot(i) for i in range(n_agents)]
 
             # select_action in parallel — each agent has independent network and state
-            with ThreadPoolExecutor(max_workers=n_agents) as ex:
-                results = list(ex.map(
-                    lambda t: t[0].select_action(t[1], t[2], training=True),
-                    [(agents[i], local_obs[i], global_state) for i in range(n_agents)],
-                ))
+            action_futures = [
+                _mappo_pool.submit(agents[i].select_action, local_obs[i], global_state, True)
+                for i in range(n_agents)
+            ]
+            results = [f.result() for f in action_futures]
             actions = [r[0] for r in results]
             log_probs = [r[1] for r in results]
 
@@ -244,9 +249,8 @@ def run(config=None, num_sessions=1, record_video=True):
                 break
 
         # PPO update in parallel — each agent has independent actor + critic
-        with ThreadPoolExecutor(max_workers=n_agents) as ex:
-            futures = [ex.submit(agent.update) for agent in agents]
-            wait(futures)
+        update_futures = [_mappo_pool.submit(agent.update) for agent in agents]
+        wait(update_futures)
 
         metrics["episode_rewards"].append(ep_reward)
         metrics["episode_deliveries"].append(info["total_deliveries"])
