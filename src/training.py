@@ -86,9 +86,10 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
         step = 0
 
         for step in range(config.MAX_STEPS):
-            # select_action in parallel — each agent has independent network
-            __opt_futs = [_optimize_pool.submit(agent.select_action, obs) for agent in agents]
-            actions = [f.result() for f in __opt_futs]
+            # select_action serial — forward pass de MLP em CPU é < 1ms,
+            # overhead de ThreadPoolExecutor supera qualquer ganho e steps_done
+            # fica determinístico (essencial para epsilon e beta annealing)
+            actions = [agent.select_action(obs) for agent in agents]
             next_obs, rewards, terminated, truncated, info = env.step(actions)
 
             for i, agent in enumerate(agents):
