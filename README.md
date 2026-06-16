@@ -360,14 +360,33 @@ Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(
 - **Atualização pós-episódio:**
   1. Computa $V(s)$ com o crítico centralizado.
   2. **GAE** (Generalized Advantage Estimation, Schulman et al. 2016):
-     $$\delta_t = r_t + \gamma V(s_{t+1})(1-d_t) - V(s_t)$$
-     $$\hat{A}_t = \sum_{l=0}^{\infty} (\gamma\lambda)^l \delta_{t+l}$$
-     $$\hat{R}_t = \hat{A}_t + V(s_t), \quad \hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}$$
+
+```math
+\delta_t = r_t + \gamma V(s_{t+1})(1-d_t) - V(s_t), \qquad \hat{A}_t = \sum_{l=0}^{\infty}(\gamma\lambda)^l\,\delta_{t+l}
+```
+
+```math
+\hat{R}_t = \hat{A}_t + V(s_t), \qquad \hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}
+```
+
   3. **PPO_EPOCHS=10** repetições com mini-batches de 32:
-     $$r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}$$
-     $$\mathcal{L}^{\text{CLIP}}(\theta) = \mathbb{E}_t\left[\min(r_t \hat{A}_t, \text{clip}(r_t, 1-\varepsilon, 1+\varepsilon) \hat{A}_t)\right]$$
-     $$H[\pi] = -\sum_{a} \pi(a|s) \log \pi(a|s), \quad \mathcal{L}_{\text{actor}} = -\mathcal{L}^{\text{CLIP}} - c_H H[\pi]$$
-     $$\mathcal{L}_{\text{critic}} = \mathbb{E}\left[(V(s) - \hat{R}_t)^2\right]$$
+
+```math
+r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}
+```
+
+```math
+\mathcal{L}^{\text{CLIP}}(\theta) = \mathbb{E}_t\!\left[\min\!\left(r_t\,\hat{A}_t,\;\operatorname{clip}(r_t,1-\varepsilon,1+\varepsilon)\,\hat{A}_t\right)\right]
+```
+
+```math
+\mathcal{L}_{\text{actor}} = -\mathcal{L}^{\text{CLIP}} - c_H\,H[\pi], \qquad H[\pi] = -\sum_{a}\pi(a|s)\log\pi(a|s)
+```
+
+```math
+\mathcal{L}_{\text{critic}} = \mathbb{E}\!\left[\bigl(V(s) - \hat{R}_t\bigr)^2\right]
+```
+
   4. Clip de gradiente em 0,5 para ator e crítico.
 - Decaimento multiplicativo de epsilon: $\varepsilon \leftarrow \varepsilon \times 0.995$ por episódio.
 
@@ -401,18 +420,33 @@ Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(
 - `TrajectoryBuffer`: acumula a trajetória completa do episódio com estados achatados de ambos os agentes.
 - **Atualização pós-episódio:**
   1. **Crítico:** MSE loss + Polyak soft update:
-     $$\mathcal{L}_{\text{critic}} = \mathbb{E}\left[(V(s) - \hat{R}_t)^2\right]$$
-     $$\theta_{\text{target}} \leftarrow (1-\tau)\theta_{\text{target}} + \tau\theta$$
-     
+
+```math
+\mathcal{L}_{\text{critic}} = \mathbb{E}\!\left[\bigl(V(s) - \hat{R}_t\bigr)^2\right]
+```
+
+```math
+\theta_{\text{target}} \leftarrow (1-\tau)\,\theta_{\text{target}} + \tau\,\theta
+```
+
   2. **Por agente** (sequencial — HATRPO original de Kuba et al. 2021):
-     
-     _Formulação teórica:_ restrição de região de confiança via KL-divergence
-     $$\max_{\pi_i} \mathbb{E}[A_i(s, \mathbf{a})] \quad \text{s.t.} \quad \mathbb{E}_s[D_{\text{KL}}(\pi_i^{\text{old}} \| \pi_i)] \leq \delta$$
-     
-     _Implementação prática:_ PPO clip como aproximação ao trust-region (ε=0,2 ≈ MAX_KL=0,02):
-     $$r_t(\theta) = \frac{\pi_\theta(a|s)}{\pi_{\theta_{\text{old}}}(a|s)}$$
-     $$\mathcal{L}_{\text{actor}} = -\mathbb{E}_t\left[\min\left(r_t \hat{A}_t, \text{clip}(r_t, 1-\varepsilon, 1+\varepsilon) \hat{A}_t\right)\right] - c_H H[\pi]$$
-     
+
+     _Formulação teórica_ — restrição de região de confiança via KL-divergence:
+
+```math
+\max_{\pi_i}\;\mathbb{E}\!\left[A_i(s,\mathbf{a})\right] \quad\text{s.t.}\quad \mathbb{E}_s\!\left[D_{\mathrm{KL}}\!\left(\pi_i^{\text{old}}(\cdot|s)\,\|\,\pi_i(\cdot|s)\right)\right] \leq \delta
+```
+
+     _Implementação prática_ — PPO clip como aproximação ao trust-region (ε=0,2 ≈ MAX_KL=0,02):
+
+```math
+r_t(\theta_i) = \frac{\pi_{\theta_i}(a \mid s)}{\pi_{\theta_i^{\text{old}}}(a \mid s)}
+```
+
+```math
+\mathcal{L}_{\text{actor}} = -\mathbb{E}_t\!\left[\min\!\left(r_t\,\hat{A}_t,\;\operatorname{clip}(r_t,1-\varepsilon,1+\varepsilon)\,\hat{A}_t\right)\right] - c_H\,H[\pi]
+```
+
      - A cada `TARGET_UPDATE_FREQ=100` passos: `actor_old.load_state_dict(actor.state_dict())`
 
 **Hiperparâmetros principais:**
