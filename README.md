@@ -364,7 +364,8 @@ Ou visualize individualmente em [plantuml.com/plantuml](https://www.plantuml.com
 | Diagrama | Tipo | Descrição |
 |----------|------|-----------|
 | [`architecture_overview.puml`](Esquemáticos/architecture_overview.puml) | Componentes | Visão geral — pacotes e dependências entre módulos de `src/` |
-| [`class_diagram.puml`](Esquemáticos/class_diagram.puml) | Classes | Todas as classes com atributos, métodos e relacionamentos |
+| [`class_diagram.puml`](Esquemáticos/class_diagram.puml) | Classes | Infraestrutura: config, environment, networks e buffers |
+| [`class_diagram_agents.puml`](Esquemáticos/class_diagram_agents.puml) | Classes | Agentes: off-policy (IDQN/VDN/QMIX) e on-policy (MAPPO/HATRPO) |
 | [`sequence_qmix.puml`](Esquemáticos/sequence_qmix.puml) | Sequência | Um passo de treino QMIX: epsilon-greedy → step → optimize (mixer + loss contrafactual) |
 | [`sequence_mappo.puml`](Esquemáticos/sequence_mappo.puml) | Sequência | Episódio e atualização MAPPO: coleta de trajetória → GAE → PPO multi-época |
 | [`sequence_hatrpo.puml`](Esquemáticos/sequence_hatrpo.puml) | Sequência | Episódio e atualização HATRPO: buffer de trajetória → GAE → trust-region update sequencial |

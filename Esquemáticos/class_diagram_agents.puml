@@ -1,0 +1,171 @@
+@startuml class_diagram_agents
+!theme plain
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam classBackgroundColor #DDEEFF
+skinparam classBorderColor #3366AA
+skinparam classHeaderBackgroundColor #AACCEE
+skinparam packageBackgroundColor #F8F8FF
+skinparam packageBorderColor #6688AA
+skinparam ArrowColor #334455
+skinparam ArrowFontSize 10
+skinparam shadowing false
+hide empty members
+
+title Diagrama de Classes — Agentes (agents/)
+
+package "agents/ — Off-Policy (Value-Based)" #E8E8FF {
+
+  class RandomAgent <<baseline>> {
+    agent_id : int
+    action_dim : int
+    --
+    select_action(state, training) : int
+    remember(...) : noop
+    optimize() : noop
+    get_epsilon() : 1.0
+  }
+
+  class IDQNAgent {
+    agent_id : int
+    policy_net : ImprovedDQN
+    target_net : ImprovedDQN
+    memory : PrioritizedReplayBuffer
+    optimizer : Adam
+    step_count : int
+    --
+    select_action(state, training) : int
+    optimize() : float
+    soft_update_target()
+    get_epsilon() : float
+    save_checkpoint(path)
+    load_checkpoint(path)
+  }
+
+  class VDNController {
+    n_agents : int
+    policy_nets : ModuleList[AgentNet]
+    target_nets : ModuleList[AgentNet]
+    memory : VDNPrioritizedReplayBuffer
+    optimizer : Adam
+    scheduler : CosineAnnealingLR
+    --
+    select_actions(obs, training) : list[int]
+    remember(s, [a], [r], s', done)
+    optimize() : float
+    _soft_update()
+  }
+
+  class QMIXAgent {
+    agent_id : int
+    policy_net : ImprovedDQN
+    target_net : ImprovedDQN
+    optimizer : Adam
+    --
+    select_action(state, training) : int
+    get_q_values(states) : Tensor
+    get_target_q_values(states) : Tensor
+    soft_update_target()
+    get_epsilon() : float
+  }
+
+  class QMIXTrainer {
+    agents : list[QMIXAgent]
+    mixer : QMixer
+    target_mixer : QMixer
+    memory : QMIXPrioritizedReplayBuffer
+    mixer_optimizer : Adam
+    --
+    remember(s,[a],[r],s',done,gs,gs')
+    optimize() : float
+  }
+
+  QMIXTrainer "1" o-- "2" QMIXAgent : contém
+}
+
+package "agents/ — On-Policy (Policy-Based)" #E8FFE8 {
+
+  class MAPPOAgent {
+    agent_id : int
+    actor : ActorNetwork
+    critic : CriticNetwork
+    actor_optimizer : Adam
+    critic_optimizer : Adam
+    states / actions / log_probs : list
+    rewards / dones / global_states : list
+    --
+    select_action(s, gs, training) : (int, float)
+    store_transition(s, a, lp, r, done, gs)
+    compute_gae(rewards, values, dones) : (A, ret)
+    update(global_states_all)
+    clear_memory()
+  }
+
+  class HATRPOAgentOptimized {
+    agent_id : int
+    actor : ImprovedActorNetwork
+    actor_old : ImprovedActorNetwork
+    optimizer : Adam
+    --
+    select_action(state, training) : (int, float)
+    update_actor(states, actions, A, old_lp)
+    get_epsilon() : float
+  }
+
+  class CentralizedCriticOptimized {
+    critic : ImprovedCriticNetwork
+    critic_target : ImprovedCriticNetwork
+    optimizer : Adam
+    --
+    get_value(global_state) : Tensor
+    get_values(global_states) : Tensor
+    compute_gae(rewards, values, dones) : (A, ret)
+    update(global_states, returns)
+  }
+
+  class TrajectoryBuffer {
+    states : list
+    actions : list
+    rewards : list
+    dones : list
+    log_probs : list
+    values : list
+    global_states : list
+    --
+    push(s_flat, [a], r, s'_flat, done,\n    [lp], V, gs, gs')
+    clear()
+    get_trajectory() : dict
+  }
+
+  HATRPOAgentOptimized    ..> TrajectoryBuffer : usa
+  CentralizedCriticOptimized ..> TrajectoryBuffer : usa
+}
+
+note bottom of IDQNAgent
+  Redes: <b>ImprovedDQN</b> (policy + target)
+  Buffer: <b>PrioritizedReplayBuffer</b>
+end note
+
+note bottom of VDNController
+  Redes: <b>AgentNet</b> (policy + target × 2 agentes)
+  Buffer: <b>VDNPrioritizedReplayBuffer</b>
+end note
+
+note bottom of QMIXTrainer
+  Redes: <b>ImprovedDQN</b> via QMIXAgent
+          <b>QMixer</b> (mixer + target_mixer)
+  Buffer: <b>QMIXPrioritizedReplayBuffer</b>
+end note
+
+note bottom of MAPPOAgent
+  Redes: <b>ActorNetwork</b> + <b>CriticNetwork</b>
+  On-policy — sem buffer de replay
+end note
+
+note bottom of HATRPOAgentOptimized
+  Redes: <b>ImprovedActorNetwork</b> (actor + actor_old)
+  Crítico: <b>CentralizedCriticOptimized</b>
+           → <b>ImprovedCriticNetwork</b> (critic + target)
+end note
+
+@enduml
