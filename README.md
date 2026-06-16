@@ -368,26 +368,19 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - `CentralizedCriticOptimized`: `ImprovedCriticNetwork` (residual) com soft update (τ=0,005) da target; responsável pelo GAE.
 - `TrajectoryBuffer`: acumula a trajetória completa do episódio com estados achatados de ambos os agentes.
 - **Atualização pós-episódio:**
-  1. **Crítico:** MSE loss + soft update da target:
-     ```
-     L_critic = E[(V(s) - R_t)²]
-     θ_target ← (1-τ)·θ_target + τ·θ
-     ```
+  1. **Crítico:** MSE loss + Polyak soft update:
+     $$\mathcal{L}_{\text{critic}} = \mathbb{E}\left[(V(s) - \hat{R}_t)^2\right]$$
+     $$\theta_{\text{target}} \leftarrow (1-\tau)\theta_{\text{target}} + \tau\theta$$
      
-  2. **Por agente (sequencial — HATRPO original de Kuba et al. 2021):**
+  2. **Por agente** (sequencial — HATRPO original de Kuba et al. 2021):
      
      _Formulação teórica:_ restrição de região de confiança via KL-divergence
-     ```
-     max E[A_i(s, a)]  s.t.  E_s[KL(π_old || π_new)] ≤ δ
-     ```
+     $$\max_{\pi_i} \mathbb{E}[A_i(s, \mathbf{a})] \quad \text{s.t.} \quad \mathbb{E}_s[D_{\text{KL}}(\pi_i^{\text{old}} \| \pi_i)] \leq \delta$$
      
-     _Implementação prática:_ PPO clip como aproximação ao trust-region:
-     ```
-     r_t(θ) = π_θ(a|s) / π_θ_old(a|s)  (probability ratio)
-     clip em [1-ε, 1+ε] onde ε=0,2 ≈ MAX_KL=0,02
+     _Implementação prática:_ PPO clip como aproximação ao trust-region (ε=0,2 ≈ MAX_KL=0,02):
+     $$r_t(\theta) = \frac{\pi_\theta(a|s)}{\pi_{\theta_{\text{old}}}(a|s)}$$
+     $$\mathcal{L}_{\text{actor}} = -\mathbb{E}_t\left[\min\left(r_t \hat{A}_t, \text{clip}(r_t, 1-\varepsilon, 1+\varepsilon) \hat{A}_t\right)\right] - c_H H[\pi]$$
      
-     L_actor = -E[ min(r·Â, clip(r,1-ε,1+ε)·Â) ] - c_H·H[π]
-     ```
      - A cada `TARGET_UPDATE_FREQ=100` passos: `actor_old.load_state_dict(actor.state_dict())`
 
 **Hiperparâmetros principais:**
