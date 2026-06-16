@@ -8,11 +8,16 @@ funcionando de forma idêntica para IDQN (greedy, sem exploração) e para o
 baseline aleatório.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+
 import imageio
 import matplotlib.pyplot as plt
 import numpy as np
 
 from .environment import WarehouseEnv
+
+# Shared background pool for video encoding and plot saving (I/O-bound)
+_bg_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="eval_io")
 
 
 def evaluate_and_record_video(agents, config, save_dir, num_episodes=1):
@@ -73,13 +78,19 @@ def evaluate_and_record_video(agents, config, save_dir, num_episodes=1):
     video_path = None
     if frames:
         video_path = save_dir / "robot_movement.mp4"
-        try:
-            print(f"\n💾 Salvando vídeo com {len(frames)} frames...")
-            imageio.mimsave(video_path, frames, fps=4)
-            print(f"✅ Vídeo salvo em: {video_path}")
-        except Exception as e:
-            print(f"⚠️ Erro ao salvar vídeo: {e}")
-            video_path = None
+        _frames_snap = list(frames)
+        _vpath = video_path
+
+        def _save_video(path, frms):
+            try:
+                print(f"\n💾 Salvando vídeo com {len(frms)} frames...")
+                imageio.mimsave(path, frms, fps=4)
+                print(f"✅ Vídeo salvo em: {path}")
+            except Exception as e:
+                print(f"⚠️ Erro ao salvar vídeo: {e}")
+
+        # Encode and write video in background — does not block the caller
+        _bg_pool.submit(_save_video, _vpath, _frames_snap)
 
     return video_path, episode_stats
 
@@ -113,13 +124,19 @@ def record_policy_video(config, act_fn, save_dir, num_episodes=1):
     video_path = None
     if frames:
         video_path = save_dir / "robot_movement.mp4"
-        try:
-            print(f"\n💾 Salvando vídeo com {len(frames)} frames...")
-            imageio.mimsave(video_path, frames, fps=4)
-            print(f"✅ Vídeo salvo em: {video_path}")
-        except Exception as e:
-            print(f"⚠️ Erro ao salvar vídeo: {e}")
-            video_path = None
+        _frames_snap = list(frames)
+        _vpath = video_path
+
+        def _save_video(path, frms):
+            try:
+                print(f"\n💾 Salvando vídeo com {len(frms)} frames...")
+                imageio.mimsave(path, frms, fps=4)
+                print(f"✅ Vídeo salvo em: {path}")
+            except Exception as e:
+                print(f"⚠️ Erro ao salvar vídeo: {e}")
+
+        # Encode and write video in background — does not block the caller
+        _bg_pool.submit(_save_video, _vpath, _frames_snap)
     return video_path
 
 
@@ -226,5 +243,14 @@ def plot_consolidated_results(metrics, save_dir):
         y -= 0.1
 
     plt.tight_layout()
-    plt.savefig(save_dir / "consolidated_results.png", dpi=150, facecolor="white")
-    plt.close()
+    fig_snap = fig  # capture reference before potential GC
+
+    def _save_plot(f, path):
+        try:
+            f.savefig(path, dpi=150, facecolor="white")
+            plt.close(f)
+        except Exception as e:
+            print(f"⚠️ Erro ao salvar gráfico: {e}")
+
+    # Write PNG in background — matplotlib savefig is I/O-bound after rendering
+    _bg_pool.submit(_save_plot, fig_snap, save_dir / "consolidated_results.png")
