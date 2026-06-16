@@ -1,0 +1,192 @@
+@startuml sequence_hatrpo
+skinparam monochrome false
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam sequenceParticipantBackgroundColor #DDEEFF
+skinparam sequenceParticipantBorderColor #3366AA
+skinparam sequenceArrowColor #333333
+skinparam sequenceLifeLineBorderColor #888888
+skinparam defaultFontName Arial
+
+title Diagrama de Sequência — Episódio e Atualização HATRPO
+
+participant "main.py\n(run)" as Main
+
+box "Ambiente" #E8F4E8
+  participant "WarehouseEnv" as Env
+end box
+
+box "Agentes HATRPO" #DDEEFF
+  participant "HATRPOAgent 1\n(id=0)" as A1
+  participant "HATRPOAgent 2\n(id=1)" as A2
+  participant "ImprovedActor\nNetwork" as Actor
+end box
+
+box "Crítico Centralizado" #FFE8D0
+  participant "CentralizedCritic\nOptimized" as Critic
+  participant "ImprovedCritic\nNetwork" as CriticNet
+end box
+
+participant "Trajectory\nBuffer" as Buf
+
+== Início do Episódio ==
+
+Main -> Env : reset()
+activate Env
+Env --> Main : obs, info
+deactivate Env
+
+Main -> Env : _get_observation_for_robot(0)\n_get_observation_for_robot(1)
+activate Env
+Env --> Main : all_states [2 × 24-dim]
+deactivate Env
+
+Main -> Env : _get_global_state()
+activate Env
+Env --> Main : global_state [22-dim]
+deactivate Env
+
+Main -> Buf : clear() (novo buffer por episódio)
+
+== Loop de Passos (até MAX_STEPS ou done) ==
+
+loop cada passo
+
+  Main -> A1 : select_action(all_states[0], training=True)
+  activate A1
+  A1 -> Actor : forward(all_states[0])
+  activate Actor
+  Actor --> A1 : probs, logits
+  deactivate Actor
+  note right of A1 : epsilon-greedy\nsobre probs
+  A1 --> Main : action1, log_prob1
+  deactivate A1
+
+  Main -> A2 : select_action(all_states[1], training=True)
+  activate A2
+  A2 --> Main : action2, log_prob2
+  deactivate A2
+
+  Main -> Critic : get_value(global_state)
+  activate Critic
+  Critic -> CriticNet : forward(global_state)
+  activate CriticNet
+  CriticNet --> Critic : value (escalar)
+  deactivate CriticNet
+  Critic --> Main : value
+  deactivate Critic
+
+  Main -> Env : step([action1, action2])
+  activate Env
+  Env --> Main : next_obs, [r1, r2], terminated, truncated, info
+  deactivate Env
+
+  Main -> Env : _get_observation_for_robot(0)\n_get_observation_for_robot(1)
+  activate Env
+  Env --> Main : next_all_states
+  deactivate Env
+
+  Main -> Env : _get_global_state()
+  activate Env
+  Env --> Main : next_global_state
+  deactivate Env
+
+  note right of Main
+    states_flat = all_states.flatten()
+    [a1, a2], reward_total = r1+r2
+    [log_prob1, log_prob2]
+  end note
+
+  Main -> Buf : push(states_flat, [a1,a2], reward_total,\nnext_states_flat, done,\n[lp1,lp2], value,\nglobal_state, next_global_state)
+
+end loop
+
+== Computação de Vantagens (pós-episódio) ==
+
+Main -> Buf : get_trajectory()
+activate Buf
+Buf --> Main : traj {states, actions, rewards,\ndones, log_probs, values,\nglobal_states}
+deactivate Buf
+
+Main -> Critic : get_values(traj["global_states"])
+activate Critic
+Critic -> CriticNet : forward(global_states_batch)
+activate CriticNet
+CriticNet --> Critic : values [T]
+deactivate CriticNet
+Critic --> Main : values [T]
+deactivate Critic
+
+Main -> Critic : compute_gae(rewards, values, dones)
+activate Critic
+note right of Critic
+  GAE: δt = rt + γ·V(st+1)·(1-done) - V(st)
+  At = δt + γ·λ·(1-done)·At+1
+  Returns = A + V
+  γ=0.99, λ=0.95
+end note
+Critic --> Main : advantages [T], returns [T]
+deactivate Critic
+
+note right of Main
+  Normaliza vantagens:
+  A = (A - mean(A)) / (std(A) + 1e-8)
+end note
+
+== Atualização do Crítico ==
+
+Main -> Critic : update(traj["global_states"], returns)
+activate Critic
+note right of Critic
+  critic_loss = MSE(V(global_states), returns)
+  critic_optimizer.step()
+  Soft update da target:
+  θ_target = 0.995·θ_target + 0.005·θ_critic
+end note
+Critic --> Main
+deactivate Critic
+
+== Atualização dos Atores (sequencial por agente) ==
+
+loop para cada agente i ∈ {0, 1}
+
+  note right of Main
+    agent_states = traj[states][:, i*24:(i+1)*24]
+    agent_actions = traj[actions][:, i]
+    agent_old_log_probs = traj[log_probs][:, i]
+  end note
+
+  alt i == 0
+    Main -> A1 : update_actor(agent_states, agent_actions,\nadvantages, agent_old_log_probs)
+    activate A1
+    A1 -> Actor : forward(agent_states) → new_log_probs
+    note right of A1
+      ratio = exp(log_π_new - log_π_old)
+      surr1 = ratio * A
+      surr2 = clip(ratio, 0.8, 1.2) * A
+      loss = -min(surr1, surr2) - entropy_coef·H
+      (clip [0.8, 1.2] implementa restrição trust-region)
+      entropy_coef = 0.01
+    end note
+    A1 -> A1 : actor_optimizer.step()
+    note right of A1
+      A cada TARGET_UPDATE_FREQ=100 steps:
+      actor_old.load_state_dict(actor.state_dict())
+    end note
+    A1 --> Main
+    deactivate A1
+  else i == 1
+    Main -> A2 : update_actor(agent_states, agent_actions,\nadvantages, agent_old_log_probs)
+    activate A2
+    note right of A2 : Mesmo fluxo que A1
+    A2 --> Main
+    deactivate A2
+  end alt
+
+end loop
+
+== Fim do Episódio ==
+
+Main -> Main : registra métricas\n(reward, deliveries, steps)
+
+@enduml

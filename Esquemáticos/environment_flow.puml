@@ -1,0 +1,104 @@
+@startuml environment_flow
+skinparam monochrome false
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam activityBackgroundColor #DDEEFF
+skinparam activityBorderColor #3366AA
+skinparam activityArrowColor #333333
+skinparam swimlaneBackgroundColor #F8F8FF
+skinparam defaultFontName Arial
+
+title Fluxo do Ambiente — WarehouseEnv.step() e Estrutura de Recompensas
+
+|WarehouseEnv.step()|
+
+start
+
+:Recebe actions = [action1, action2];
+:steps += 1;
+:Inicializa rewards = [0.0, 0.0];
+
+fork
+  |WarehouseEnv.step()|
+  :== Fase de Movimento (ações 0-3) ==\nPara cada robô i;
+
+  if (action[i] < 4?) then (sim — mover)
+    :Calcula nova posição\nsegundo direção (0=cima, 1=baixo,\n2=esquerda, 3=direita);
+    if (posição válida?\n(dentro dos limites, sem parede X,\nsem barreira Y, sem outro robô)) then (sim)
+      :Atualiza posição do robô no grid;
+      :distance_traveled[i] += 1;
+      :move_reward = -0.005;
+    else (não — bloqueado)
+      :collisions += 1;
+      :move_reward = -0.02;
+    endif
+  else (não — ação 4 ou 5)
+    :move_reward = 0;
+  endif
+
+fork again
+  |Cálculo de Recompensa|
+  :== Fase de Interação (ações 4-5) ==\nPara cada robô i;
+
+  if (action[i] == 4?) then (PEGAR — pickup)
+    if (caixa disponível\nna posição do robô?) then (sim)
+      :Associa caixa ao robô\n(box_positions[id] = None\nrobot_carries[i] = caixa_id);
+      :interaction_reward = +2.0;
+    else (não)
+      :interaction_reward = -0.02;
+    endif
+  elseif (action[i] == 5?) then (SOLTAR — drop)
+    if (robô carrega caixa?) then (sim)
+      if (posição atual é alvo B?) then (sim — entrega!)
+        :delivered_boxes[caixa_id] = True;
+        :total_deliveries += 1;
+        :interaction_reward = +25.0;
+      else (não é alvo)
+        :Solta a caixa na posição atual;
+        :interaction_reward = -0.05;
+      endif
+    else (robô não carrega)
+      :interaction_reward = -0.02;
+    endif
+  else (ação 0-3 — já tratada)
+    :interaction_reward = 0;
+  endif
+
+end fork
+
+|Cálculo de Recompensa|
+
+:base_reward[i] = move_reward[i] + interaction_reward[i];
+
+:== Potential-Based Reward Shaping ==\nPara cada robô i;
+:dist_atual = distância mínima à caixa mais próxima\nque ainda não foi entregue;
+if (dist_atual < dist_prev[i]?) then (aproximou-se)
+  :shaping = +0.1 * Δdist;
+else (afastou-se)
+  :shaping = -0.02 * Δdist;
+endif
+:dist_prev[i] = dist_atual;
+:rewards[i] = base_reward[i] + shaping;
+
+if (todas as caixas entregues?) then (sim)
+  :bônus terminal: rewards[i] += +50.0 / n_robots;
+  note right : Bônus de +50 dividido\nigualmente entre os robôs
+endif
+
+|WarehouseEnv.step()|
+
+:terminated = all(delivered_boxes);
+:truncated = (steps >= MAX_STEPS);
+:observation = _get_observation()\n[22-dim normalizado];
+
+:Retorna:\n(obs, rewards, terminated, truncated, info);
+
+if (terminated ou truncated?) then (sim)
+  :Episódio encerrado;
+  stop
+else (não)
+  :Aguarda próxima chamada a step();
+  end
+endif
+
+@enduml

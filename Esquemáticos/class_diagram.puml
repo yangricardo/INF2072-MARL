@@ -1,0 +1,157 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam classBackgroundColor #DDEEFF
+skinparam classBorderColor #3366AA
+skinparam classHeaderBackgroundColor #AACCEE
+skinparam packageBackgroundColor #F8F8FF
+skinparam packageBorderColor #6688AA
+skinparam ArrowColor #334455
+skinparam ArrowFontSize 10
+skinparam shadowing false
+skinparam linetype ortho
+hide empty members
+
+title Diagrama de Classes — Infraestrutura (config · environment · networks · buffers)
+
+' ═══════════════════════════════════════════════════════════════
+'  config.py
+' ═══════════════════════════════════════════════════════════════
+package "config.py" #E8F4E8 {
+  class BaseConfig {
+    MAX_STEPS : int
+    EPISODES_PER_SESSION : int
+    BASE_DIR : str
+  }
+  class IDQNConfig {
+    EPSILON_START/END : float
+    EPSILON_DECAY_STEPS : int
+    LEARNING_RATE : float
+    BATCH_SIZE : int
+    GAMMA / TAU : float
+    HIDDEN_DIM : int
+  }
+  class VDNConfig {
+    LEARNING_RATE : float
+    GAMMA / TAU : float
+    HIDDEN_DIM : int
+  }
+  class QMIXConfig {
+    LEARNING_RATE : float
+    HIDDEN_DIM : int
+    MIXER_HIDDEN_DIM : int
+  }
+  class MAPPOConfig {
+    ACTOR_LR / CRITIC_LR : float
+    GAMMA / LAMBDA : float
+    CLIP_EPS : float
+    PPO_EPOCHS : int
+  }
+  class HATRPOConfig {
+    ACTOR_LR / CRITIC_LR : float
+    GAMMA / LAMBDA : float
+    MAX_KL : float
+    HIDDEN_DIM : int
+    NUM_LAYERS : int
+  }
+  class RandomConfig {}
+
+  BaseConfig <|-- IDQNConfig
+  BaseConfig <|-- VDNConfig
+  BaseConfig <|-- QMIXConfig
+  BaseConfig <|-- MAPPOConfig
+  BaseConfig <|-- HATRPOConfig
+  BaseConfig <|-- RandomConfig
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  environment.py
+' ═══════════════════════════════════════════════════════════════
+package "environment.py" #FFF8E8 {
+  class WarehouseEnv {
+    height / width : int
+    num_robots : int
+    robot_positions : list
+    box_positions : list
+    targets : list
+    --
+    reset() : (obs, info)
+    step(actions) : (obs, rewards, term, trunc, info)
+    _get_observation() : ndarray[22]
+    _get_global_state() : ndarray[22]
+    _get_observation_for_robot(id) : ndarray[24]
+    render_frame() : ndarray
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  networks.py
+' ═══════════════════════════════════════════════════════════════
+package "networks.py" #F4E8FF {
+  class ImprovedDQN <<IDQN · QMIX>> {
+    network : Sequential (3 camadas + Dropout)
+    forward(x) : Tensor[action_dim]
+  }
+  class AgentNet <<VDN>> {
+    net : Sequential (LayerNorm + init ortog.)
+    forward(x) : Tensor[action_dim]
+  }
+  class QMixer <<QMIX>> {
+    n_agents : int
+    hyper_w1/w2 : Linear  (pesos ≥ 0)
+    hyper_b1/b2 : Linear / Sequential
+    forward(agent_qs, states) : Tensor
+  }
+  class ActorNetwork <<MAPPO>> {
+    fc1 / fc2 / fc3 : Linear
+    forward(x) : (probs, logits)
+  }
+  class CriticNetwork <<MAPPO>> {
+    fc1 / fc2 / fc3 : Linear
+    forward(x) : Tensor [scalar]
+  }
+  class ImprovedActorNetwork <<HATRPO>> {
+    hidden_layers : ModuleList (residual)
+    layer_norms : ModuleList
+    dropout : Dropout
+    forward(x) : (probs, logits)
+  }
+  class ImprovedCriticNetwork <<HATRPO>> {
+    hidden_layers : ModuleList (residual)
+    layer_norms : ModuleList
+    forward(x) : Tensor [scalar]
+  }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  replay_buffer.py
+' ═══════════════════════════════════════════════════════════════
+package "replay_buffer.py" #FFE8E8 {
+  class PrioritizedReplayBuffer <<IDQN>> {
+    capacity : int
+    alpha / beta : float
+    --
+    push(s, a, r, s', done)
+    sample(batch_size) : tuple
+    update_priorities(idx, td_err)
+  }
+  class VDNPrioritizedReplayBuffer <<VDN>> {
+    capacity : int
+    alpha : float
+    --
+    push(s, [a], [r], s', done)
+    sample(batch_size, beta) : tuple
+    update_priorities(idx, td_err)
+  }
+  class QMIXPrioritizedReplayBuffer <<QMIX>> {
+    capacity : int
+    alpha / beta : float
+    --
+    push(s, [a], [r], s', done, gs, gs')
+    sample(batch_size) : tuple
+    update_priorities(idx, td_err)
+  }
+}
+
+@enduml

@@ -1,0 +1,91 @@
+@startuml architecture_overview
+!theme plain
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #445566
+skinparam ArrowFontSize 10
+skinparam shadowing false
+
+title Visão Geral da Arquitetura — LocalMultiAgente
+
+left to right direction
+
+' ══════════════════════════════════════════════════════════
+'  COLUNA A — Entrada + Treino
+' ══════════════════════════════════════════════════════════
+rectangle "**CLI**" as CLI #E8EEF8 {
+  rectangle "main.py\n<i>(despachante --algo)</i>" as Main #DDEEFF
+}
+
+rectangle "**Treino / Avaliação**  src/" as TA #F0FFF4 {
+  rectangle "training.py\n<i>run_training · train_session</i>" as Training #C8EED8
+  rectangle "evaluation.py\n<i>vídeo + gráficos</i>" as Eval #C8EED8
+}
+
+' Mantém CLI e TA na mesma coluna
+CLI -[hidden]down-> TA
+
+' ══════════════════════════════════════════════════════════
+'  COLUNA B — Agentes
+' ══════════════════════════════════════════════════════════
+rectangle "**Agentes**  src/agents/" as AGENTS #F0F0FF {
+
+  rectangle "Off-Policy (Value-Based)" as VP #E8E8FF {
+    rectangle "random_agent.py\n<i>«baseline»</i>" as Rand #DDEEFF
+    rectangle "idqn.py\nIDQNAgent\n<i>Double DQN + PER</i>" as IDQN #DDEEFF
+    rectangle "vdn.py\nVDNController\n<i>Q_tot = Q1 + Q2</i>" as VDN #DDEEFF
+    rectangle "qmix.py\nQMIXAgent + QMIXTrainer\n<i>mixer monotônico</i>" as QMIX #DDEEFF
+  }
+
+  rectangle "On-Policy (Policy-Based)" as PP #E8FFE8 {
+    rectangle "mappo.py\nMAPPOAgent\n<i>PPO + crítico centralizado</i>" as MAPPO #D0F0D0
+    rectangle "hatrpo.py\nHATRPOAgent\n<i>Trust-Region + residual</i>" as HATRPO #D0F0D0
+  }
+}
+
+' ══════════════════════════════════════════════════════════
+'  COLUNA C — Infraestrutura
+' ══════════════════════════════════════════════════════════
+rectangle "**Infraestrutura**  src/" as INFRA #FFF8F0 {
+  rectangle "networks.py\n<i>ImprovedDQN · AgentNet</i>\n<i>QMixer · Actor/Critic</i>" as Networks #FFE8CC
+  rectangle "replay_buffer.py\n<i>Prioritized · VDN · QMIX</i>" as Buffer #FFE8CC
+  rectangle "environment.py\nWarehouseEnv\n<i>grade 12×8 · obs 22-dim</i>" as Env #FFE8CC
+  rectangle "config.py\n<i>BaseConfig · *Config · MAP_CONFIG</i>" as Config #FFE8CC
+}
+
+' ══════════════════════════════════════════════════════════
+'  RELAÇÕES
+' ══════════════════════════════════════════════════════════
+
+' CLI → agentes e treino
+Main --> Rand     : "--algo random"
+Main --> IDQN     : "--algo idqn"
+Main --> VDN      : "--algo vdn"
+Main --> QMIX     : "--algo qmix"
+Main --> MAPPO    : "--algo mappo"
+Main --> HATRPO   : "--algo hatrpo"
+Main --> Training : "usa (IDQN/Random)"
+
+' Treino / Avaliação
+Training --> Eval  : "ao final da sessão"
+Training ..> IDQN  : "gerencia"
+Training ..> Rand  : "gerencia"
+Eval     --> Env   : "renderiza episódio"
+
+' Agentes → Redes Neurais
+IDQN   --> Networks : "ImprovedDQN"
+VDN    --> Networks : "AgentNet"
+QMIX   --> Networks : "ImprovedDQN\n+ QMixer"
+MAPPO  --> Networks : "ActorNetwork\n+ CriticNetwork"
+HATRPO --> Networks : "ImprovedActor\n+ ImprovedCritic"
+
+' Agentes Off-Policy → Buffers
+IDQN --> Buffer : "Prioritized"
+VDN  --> Buffer : "VDN-Prioritized"
+QMIX --> Buffer : "QMIX-Prioritized"
+
+' Agentes → Ambiente (grupo)
+AGENTS --> Env  : "instancia WarehouseEnv"
+Config  --> Env : "MAP_CONFIG"
+
+@enduml

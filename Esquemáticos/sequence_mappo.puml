@@ -1,0 +1,157 @@
+@startuml sequence_mappo
+skinparam monochrome false
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam sequenceParticipantBackgroundColor #DDEEFF
+skinparam sequenceParticipantBorderColor #3366AA
+skinparam sequenceArrowColor #333333
+skinparam sequenceLifeLineBorderColor #888888
+skinparam defaultFontName Arial
+
+title Diagrama de Sequência — Episódio e Atualização MAPPO
+
+participant "main.py\n(run)" as Main
+
+box "Ambiente" #E8F4E8
+  participant "WarehouseEnv" as Env
+end box
+
+box "Agente 1 (id=0)" #DDEEFF
+  participant "MAPPOAgent 1" as A1
+  participant "ActorNetwork 1" as Act1
+  participant "CriticNetwork 1" as Crit1
+end box
+
+box "Agente 2 (id=1)" #FFE8D0
+  participant "MAPPOAgent 2" as A2
+  participant "ActorNetwork 2" as Act2
+  participant "CriticNetwork 2" as Crit2
+end box
+
+== Início do Episódio ==
+
+Main -> Env : reset()
+activate Env
+Env --> Main : obs, info
+deactivate Env
+
+Main -> A1 : clear_memory()
+Main -> A2 : clear_memory()
+
+Main -> Env : _get_global_state()
+activate Env
+Env --> Main : global_state [22-dim]
+deactivate Env
+
+== Loop de Passos (até MAX_STEPS ou done) ==
+
+loop cada passo
+
+  Main -> Env : _get_observation_for_robot(0)
+  activate Env
+  Env --> Main : local_obs_1 [24-dim: obs_base + one-hot(1,0)]
+  deactivate Env
+
+  Main -> Env : _get_observation_for_robot(1)
+  activate Env
+  Env --> Main : local_obs_2 [24-dim: obs_base + one-hot(0,1)]
+  deactivate Env
+
+  Main -> A1 : select_action(local_obs_1, global_state, training=True)
+  activate A1
+  A1 -> Act1 : forward(local_obs_1)
+  activate Act1
+  Act1 --> A1 : probs, logits
+  deactivate Act1
+  note right of A1 : Epsilon-greedy:\nse rand < ε → random\nsenão → sample(probs)
+  A1 --> Main : action1, log_prob1
+  deactivate A1
+
+  Main -> A2 : select_action(local_obs_2, global_state, training=True)
+  activate A2
+  A2 -> Act2 : forward(local_obs_2)
+  activate Act2
+  Act2 --> A2 : probs, logits
+  deactivate Act2
+  A2 --> Main : action2, log_prob2
+  deactivate A2
+
+  Main -> Env : step([action1, action2])
+  activate Env
+  Env --> Main : next_obs, [r1, r2], terminated, truncated, info
+  deactivate Env
+
+  Main -> A1 : store_transition(local_obs_1, action1, log_prob1, r1, done, global_state)
+  Main -> A2 : store_transition(local_obs_2, action2, log_prob2, r2, done, global_state)
+
+  Main -> Env : _get_global_state()
+  activate Env
+  Env --> Main : global_state (próximo passo)
+  deactivate Env
+
+end loop
+
+== Atualização dos Agentes (pós-episódio) ==
+
+Main -> A1 : update()
+activate A1
+
+A1 -> Crit1 : forward(global_states)
+activate Crit1
+Crit1 --> A1 : values [T]
+deactivate Crit1
+
+note right of A1
+  GAE (Generalized Advantage Estimation):
+  δt = rt + γ·V(st+1)·(1-done) - V(st)
+  At = δt + γ·λ·(1-done)·At+1
+  Returns = A + V
+  Normaliza vantagens: (A - mean) / std
+  λ = 0.95, γ = 0.99
+end note
+
+loop PPO_EPOCHS = 10 (mini-batches de 32)
+
+  A1 -> Act1 : forward(batch_states)
+  activate Act1
+  Act1 --> A1 : new_probs, new_logits
+  deactivate Act1
+
+  note right of A1
+    ratio = exp(log_π_new - log_π_old)
+    surr1 = ratio * A
+    surr2 = clip(ratio, 1-ε, 1+ε) * A  [ε=0.2]
+    actor_loss = -min(surr1, surr2) - entropy_coef·H
+    entropy_coef = 0.01
+  end note
+
+  A1 -> Crit1 : forward(batch_global_states)
+  activate Crit1
+  Crit1 --> A1 : values
+  deactivate Crit1
+
+  note right of A1
+    critic_loss = MSE(values, returns)
+  end note
+
+  A1 -> Act1 : actor_optimizer.step()\n[clip_grad_norm_ = 0.5]
+  A1 -> Crit1 : critic_optimizer.step()\n[clip_grad_norm_ = 0.5]
+
+end loop
+
+A1 -> A1 : decay_epsilon() [ε *= 0.995]
+A1 -> A1 : clear_memory()
+
+deactivate A1
+
+Main -> A2 : update()
+activate A2
+note right of A2 : Mesmo fluxo de\natualização que A1
+A2 --> Main
+deactivate A2
+
+== Fim do Episódio ==
+
+Main -> Main : registra métricas\n(reward, deliveries, steps)
+
+@enduml

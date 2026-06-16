@@ -1,0 +1,151 @@
+@startuml sequence_qmix
+skinparam monochrome false
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam sequenceParticipantBackgroundColor #DDEEFF
+skinparam sequenceParticipantBorderColor #3366AA
+skinparam sequenceArrowColor #333333
+skinparam sequenceLifeLineBorderColor #888888
+skinparam defaultFontName Arial
+
+title Diagrama de Sequência — Passo de Treino QMIX
+
+participant "main.py\n(run)" as Main
+
+box "Ambiente" #E8F4E8
+  participant "WarehouseEnv" as Env
+end box
+
+box "Algoritmo QMIX" #DDEEFF
+  participant "QMIXAgent 1" as A1
+  participant "QMIXAgent 2" as A2
+  participant "QMixer\n(+ target_mixer)" as Mixer
+  participant "QMIXTrainer" as Trainer
+  participant "QMIXPrioritized\nReplayBuffer" as Buffer
+end box
+
+== Início do Episódio ==
+
+Main -> Env : reset()
+activate Env
+Env --> Main : obs, info
+deactivate Env
+
+Main -> Env : _get_global_state()
+activate Env
+Env --> Main : global_state [22-dim]
+deactivate Env
+
+== Loop de Passos (até MAX_STEPS ou done) ==
+
+loop cada passo
+
+  Main -> A1 : select_action(obs, training=True)
+  activate A1
+  note right of A1 : epsilon-greedy\nsobre policy_net(obs)
+  A1 --> Main : action1
+  deactivate A1
+
+  Main -> A2 : select_action(obs, training=True)
+  activate A2
+  A2 --> Main : action2
+  deactivate A2
+
+  Main -> Env : step([action1, action2])
+  activate Env
+  Env --> Main : next_obs, rewards, terminated,\ntruncated, info
+  deactivate Env
+
+  Main -> Env : _get_global_state()
+  activate Env
+  Env --> Main : next_global_state
+  deactivate Env
+
+  Main -> Trainer : remember(obs, [a1,a2], [r1,r2],\nnext_obs, done, global_state,\nnext_global_state)
+  activate Trainer
+  Trainer -> Buffer : push(...)
+  deactivate Trainer
+
+  Main -> Trainer : optimize()
+  activate Trainer
+
+  alt buffer com amostras suficientes
+
+    Trainer -> Buffer : sample(BATCH_SIZE)
+    activate Buffer
+    Buffer --> Trainer : states, actions, rewards,\nnext_states, dones,\nglobal_states, next_global_states,\nindices, weights
+    deactivate Buffer
+
+    Trainer -> A1 : get_q_values(states)
+    activate A1
+    A1 --> Trainer : Q1_curr [batch]
+    deactivate A1
+
+    Trainer -> A2 : get_q_values(states)
+    activate A2
+    A2 --> Trainer : Q2_curr [batch]
+    deactivate A2
+
+    Trainer -> Mixer : forward([Q1_curr, Q2_curr], global_states)
+    activate Mixer
+    Mixer --> Trainer : Q_total_curr [batch]
+    deactivate Mixer
+
+    Trainer -> A1 : get_target_q_values(next_states)
+    activate A1
+    A1 --> Trainer : Q1_target [batch]
+    deactivate A1
+
+    Trainer -> A2 : get_target_q_values(next_states)
+    activate A2
+    A2 --> Trainer : Q2_target [batch]
+    deactivate A2
+
+    note right of Trainer
+      Seleciona ação greedy por Double-DQN:
+      a1* = argmax policy_net1(next_states)
+      a2* = argmax policy_net2(next_states)
+      Q1_max = Q1_target[a1*]
+      Q2_max = Q2_target[a2*]
+    end note
+
+    Trainer -> Mixer : forward([Q1_max, Q2_max], next_global_states)\n[usando target_mixer]
+    activate Mixer
+    Mixer --> Trainer : Q_total_target [batch]
+    deactivate Mixer
+
+    note right of Trainer
+      target = R_total + γ * Q_total_target * (1 - done)
+      TD_error = target - Q_total_curr
+      loss_mixer = mean(W * TD_error²)
+    end note
+
+    Trainer -> Trainer : mixer_optimizer.zero_grad()\nmixer_loss.backward()\nclip_grad_norm_(mixer, max_norm=10)\nmixer_optimizer.step()
+
+    loop para cada agente i ∈ {0, 1}
+      note right of Trainer
+        loss_agente_i = mean(W * TD_error.detach() * Qi_curr)
+        (loss contrafactual — COMA style)
+      end note
+      Trainer -> A1 : optimizer.step() [se i==0]
+      Trainer -> A2 : optimizer.step() [se i==1]
+      Trainer -> A1 : soft_update_target()\nθ_target = τ·θ_policy + (1-τ)·θ_target
+    end loop
+
+    Trainer -> Buffer : update_priorities(indices, |TD_errors|)
+    activate Buffer
+    deactivate Buffer
+
+  else buffer insuficiente
+    note right of Trainer : aguarda LEARNING_STARTS\ntransições no buffer
+  end alt
+
+  deactivate Trainer
+
+end loop
+
+== Fim do Episódio ==
+
+Main -> Main : registra métricas\n(reward, deliveries, steps)
+
+@enduml

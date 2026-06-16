@@ -1,0 +1,101 @@
+@startuml training_pipeline
+skinparam monochrome false
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam activityBackgroundColor #DDEEFF
+skinparam activityBorderColor #3366AA
+skinparam activityArrowColor #333333
+skinparam defaultFontName Arial
+
+title Pipeline de Treinamento Multi-Sessão (IDQN / Random)
+
+note right
+  VDN, QMIX, MAPPO e HATRPO usam um
+  único run() por módulo em vez deste
+  pipeline multi-sessão com checkpoints.
+end note
+
+start
+
+:python -m src.main --algo <algo> --sessions N;
+:main() — parse args (--algo, --sessions, --episodes, --output, --no-video);
+:config = *Config();
+:run_training(agent_class, config, num_sessions, record_video);
+
+:Cria WarehouseEnv temporário para obter\nstate_dim (22) e action_dim (6);
+:Instancia agents[0] e agents[1] = agent_class(state_dim, action_dim, i, config);
+:total_episodes_done = 0;
+
+repeat
+
+  note right : session_num = 1 ... N
+
+  if (session_num > 1 e checkpoint existe?) then (sim)
+    :Para cada agente: agent.load_checkpoint(checkpoint_dir);
+    :Restaura epsilon, step_count, otimizador;
+  endif
+
+  :Cria session_dir com subpastas metrics/ e checkpoints/;
+
+  repeat
+
+    note right : episódio em range(EPISODES_PER_SESSION)
+
+    :env.reset() → obs, info;
+    :episode_reward = 0;
+    :episode_steps = 0;
+
+    repeat
+
+      note right : passo dentro do episódio
+
+      :actions = [agent.select_action(obs, training=True)\n            para cada agente];
+
+      :next_obs, rewards, terminated, truncated, info\n= env.step(actions);
+
+      :Para cada agente:\nagent.remember(obs, action, reward, next_obs, done);
+
+      :Para cada agente:\nagent.optimize() → atualiza rede e buffer;
+
+      note right
+        IDQN: Double DQN + PER + soft update
+        Random: no-op
+      end note
+
+      :obs = next_obs;
+      :episode_reward += sum(rewards);
+      :episode_steps += 1;
+
+    repeat while (not terminated e not truncated e steps < MAX_STEPS)
+
+    :Registra métricas do episódio\n(reward, deliveries, steps, collisions, etc.);
+
+    if (episode_reward > best_reward?) then (sim)
+      :best_reward = episode_reward;
+      :Para cada agente:\nsalva best_agent_i_epXXX.pth;
+    endif
+
+    if (episódio % SAVE_CHECKPOINT_EVERY == 0?) then (sim)
+      :Para cada agente:\nagent.save_checkpoint(checkpoint_dir);
+      :Salva metrics_checkpoint.csv;
+    endif
+
+  repeat while (episódios restantes na sessão)
+
+  :Salva training_metrics.csv (sessão completa);
+  :Para cada agente: salva agent_i_final.pth;
+  :total_episodes_done += EPISODES_PER_SESSION;
+
+repeat while (sessões restantes)
+
+:Consolida métricas de todas as sessões\nem consolidated_metrics.csv;
+:plot_consolidated_results()\n→ consolidated_results.png (6 painéis);
+
+if (record_video == True?) then (sim)
+  :evaluate_and_record_video(agents, config, results_dir)\n→ avalia em modo determinístico (sem exploração);
+  :Salva robot_movement.mp4;
+endif
+
+stop
+
+@enduml
