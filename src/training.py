@@ -83,6 +83,8 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
         total=total_episodes - start_episode,
     ):
         obs, info = env.reset()
+        # Garantir que cada agente tenha sua própria cópia da observação inicial
+        local_obs = [env._get_observation_for_robot(i) for i in range(len(agents))]
         episode_reward = 0
         episode_collisions = 0
         step = 0
@@ -91,12 +93,15 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
             # select_action serial — forward pass de MLP em CPU é < 1ms,
             # overhead de ThreadPoolExecutor supera qualquer ganho e steps_done
             # fica determinístico (essencial para epsilon e beta annealing)
-            actions = [agent.select_action(obs) for agent in agents]
-            next_obs, rewards, terminated, truncated, info = env.step(actions)
+            # Cada agente decide a ação baseada estritamente na SUA própria observação
+            actions = [agents[i].select_action(local_obs[i]) for i in range(len(agents))]
+            _, rewards, terminated, truncated, info = env.step(actions)
+            # Coleta as próximas observações locais do passo futuro
+            next_local_obs = [env._get_observation_for_robot(i) for i in range(len(agents))]
 
             for i, agent in enumerate(agents):
                 agent.remember(
-                    obs, actions[i], rewards[i], next_obs, terminated or truncated
+                    local_obs[i], actions[i], rewards[i], next_local_obs[i], terminated or truncated
                 )
                 episode_reward += rewards[i]
 
@@ -110,7 +115,7 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
             if futures:
                 wait(list(futures.values()))
 
-            obs = next_obs
+            local_obs = next_local_obs
 
             if terminated or truncated:
                 break
@@ -225,8 +230,11 @@ def run_training(agent_class, config, num_sessions=1, record_video=True):
 
     # Inicializa ambiente para obter dimensões
     env = WarehouseEnv(config=config)
-    sample_obs, _ = env.reset()
-    state_dim = len(sample_obs)
+    env.reset()
+    
+    # CORREÇÃO CRÍTICA: Captura o tamanho real da observação local de um robô (42)
+    state_dim = len(env._get_observation_for_robot(0))
+    
     action_dim = env.num_actions
     env.close()
 
