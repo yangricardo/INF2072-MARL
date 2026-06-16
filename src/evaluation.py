@@ -84,6 +84,45 @@ def evaluate_and_record_video(agents, config, save_dir, num_episodes=1):
     return video_path, episode_stats
 
 
+def record_policy_video(config, act_fn, save_dir, num_episodes=1):
+    """Grava um vídeo executando uma política genérica.
+
+    ``act_fn(env, obs) -> list[int]`` devolve as ações conjuntas de um passo;
+    encapsula como cada algoritmo escolhe ações (obs compartilhada ou por-robô),
+    servindo a IDQN/VDN/QMIX/MAPPO/HATRPO uniformemente.
+    """
+    env = WarehouseEnv(config=config)
+    frames = []
+    for _ in range(num_episodes):
+        obs, _ = env.reset()
+        while True:
+            try:
+                frames.append(env.render_frame())
+            except Exception as e:
+                print(f"  ⚠️ Erro ao capturar frame: {e}")
+            actions = act_fn(env, obs)
+            obs, _, terminated, truncated, _ = env.step(actions)
+            if terminated or truncated:
+                try:
+                    frames.append(env.render_frame())
+                except Exception:
+                    pass
+                break
+    env.close()
+
+    video_path = None
+    if frames:
+        video_path = save_dir / "robot_movement.mp4"
+        try:
+            print(f"\n💾 Salvando vídeo com {len(frames)} frames...")
+            imageio.mimsave(video_path, frames, fps=4)
+            print(f"✅ Vídeo salvo em: {video_path}")
+        except Exception as e:
+            print(f"⚠️ Erro ao salvar vídeo: {e}")
+            video_path = None
+    return video_path
+
+
 def plot_consolidated_results(metrics, save_dir):
     """Gera o painel 2x3 de métricas consolidadas."""
 
