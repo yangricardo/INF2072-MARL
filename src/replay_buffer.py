@@ -10,28 +10,37 @@ import numpy as np
 class SumTree:
     """Árvore binária completa para soma de prioridades (Segment Tree / SumTree).
 
-    Capacidade fixa alocada no construtor. Operações de sample e update em O(log N).
+    Capacidade fixa alocada no construtor. Operações de sample, update e
+    max_priority em O(log N). Mantém duas árvores:
+    - ``sum_tree``: soma das prioridades (para sample)
+    - ``max_tree``: máximo das prioridades (para O(1) max_priority)
     """
 
     def __init__(self, capacity: int):
         self.capacity = capacity
-        # tree[0] = raiz (soma total), tree[capacity-1] = último nó interno
-        # tree[capacity..2*capacity-1] = folhas (prioridades individuais)
-        self.tree = np.zeros(2 * capacity, dtype=np.float64)
+        # sum_tree[0] = raiz (soma total), sum_tree[capacity-1] = último nó interno
+        # sum_tree[capacity..2*capacity-1] = folhas (prioridades individuais)
+        self.sum_tree = np.zeros(2 * capacity, dtype=np.float64)
+        # max_tree paralela — mesma estrutura, cada nó = max dos filhos
+        self.max_tree = np.zeros(2 * capacity, dtype=np.float64)
         self._write_index = 0
         self._size = 0
 
     def _propagate(self, idx: int):
-        """Sobe pela árvore atualizando os pais após mudança em uma folha."""
+        """Sobe pela árvore atualizando os pais (sum e max) após mudança em uma folha."""
         parent = idx // 2
         while parent >= 1:
-            self.tree[parent] = self.tree[2 * parent] + self.tree[2 * parent + 1]
+            left = 2 * parent
+            right = left + 1
+            self.sum_tree[parent] = self.sum_tree[left] + self.sum_tree[right]
+            self.max_tree[parent] = max(self.max_tree[left], self.max_tree[right])
             parent //= 2
 
     def add(self, priority: float):
         """Adiciona/sobrescreve uma folha com a prioridade dada."""
         idx = self.capacity + self._write_index
-        self.tree[idx] = priority
+        self.sum_tree[idx] = priority
+        self.max_tree[idx] = priority
         self._propagate(idx)
         self._write_index = (self._write_index + 1) % self.capacity
         if self._size < self.capacity:
@@ -40,7 +49,8 @@ class SumTree:
     def update(self, index: int, priority: float):
         """Atualiza a prioridade de uma folha pelo índice linear (buffer index)."""
         idx = self.capacity + index
-        self.tree[idx] = priority
+        self.sum_tree[idx] = priority
+        self.max_tree[idx] = priority
         self._propagate(idx)
 
     def sample(self, batch_size: int, rng: np.random.Generator) -> np.ndarray:
@@ -68,28 +78,22 @@ class SumTree:
         while idx < self.capacity:
             left = 2 * idx
             right = left + 1
-            if value <= self.tree[left]:
+            if value <= self.sum_tree[left]:
                 idx = left
             else:
-                value -= self.tree[left]
+                value -= self.sum_tree[left]
                 idx = right
         return idx - self.capacity  # converte de índice na árvore para índice do buffer
 
     def max_priority(self) -> float:
-        """Retorna a maior prioridade armazenada (O(1) — lê a raiz do max-tree)."""
-        # Percorre as folhas para encontrar o máximo — O(capacity) se usarmos isso.
-        # Melhor: manter uma max-tree paralela, mas para simplificar, faremos scan
-        # nas folhas. Como isso é chamado apenas no push (não no sample), o custo
-        # é amortizado.
+        """Retorna a maior prioridade armazenada (O(1) — lê a raiz da max_tree)."""
         if self._size == 0:
             return 1.0
-        start = self.capacity
-        end = start + self._size
-        return float(self.tree[start:end].max())
+        return float(self.max_tree[1])
 
     def total(self) -> float:
-        """Soma de todas as prioridades (raiz da árvore)."""
-        return float(self.tree[1])
+        """Soma de todas as prioridades (raiz da sum_tree)."""
+        return float(self.sum_tree[1])
 
     @property
     def size(self) -> int:
@@ -152,7 +156,7 @@ class PrioritizedReplayBuffer:
 
         # Probabilities P(i) = p_i / sum(p_j)
         probs = np.array(
-            [self.tree.tree[self.tree.capacity + idx] / total for idx in indices],
+            [self.tree.sum_tree[self.tree.capacity + idx] / total for idx in indices],
             dtype=np.float64,
         )
 
