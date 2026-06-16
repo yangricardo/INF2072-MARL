@@ -98,33 +98,33 @@ Revisão de oportunidades de paralelismo no loop de treino. Todas as operações
 | I4  | src/agents/mappo.py, hatrpo.py | TODO   | Usar retorno direto de `env.reset()` em vez de API privada                         |
 | D1  | src/utils.py (novo)            | TODO   | Extrair `compute_gae` para função reutilizável (duplicada em mappo.py e hatrpo.py) |
 | D2  | src/evaluation.py              | TODO   | Extrair consolidação de métricas para função reutilizável (duplicada em 4 runners) |
-| E1  | src/agents/mappo.py, hatrpo.py | TODO   | Mudar `advantages.insert(0)` para `append` + `reverse` — O(n) em vez de O(n²)      |
+| E1  | src/agents/mappo.py, hatrpo.py | ✅     | `advantages.append()` + `reverse()` já implementado — O(n), não O(n²)              |
 | E2  | src/agents/qmix.py             | TODO   | Reutilizar `curr_qs` em vez de chamar `get_q_values` duas vezes no mesmo batch     |
 
 ---
 
 ## 🔄 Desvios Teóricos vs Papers Originais (Fase 2)
 
-| Agente             | Desvio                                                            | Severidade | Impacto                                                                                                      |
-| ------------------ | ----------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
-| IDQN (Mnih 2015)   | Sem beta annealing em PER (VDN tem, IDQN não)                     | MÉDIO      | Importância-sampling bias não corrigida ao final do treino                                                   |
-| IDQN               | Sem fallback hard-update se `USE_SOFT_UPDATE=False`               | BAIXO      | Soft-update é apenas mecanismo; hard-update nunca acionado                                                   |
-| VDN (Sunehag 2017) | Usa observação global para todos os agentes (paper usa obs local) | MÉDIO      | Viola decentralized execution —não é realmente descentralizável em tempo de teste                            |
-| VDN                | Recompensas somadas (em vez de team reward único)                 | MÉDIO      | Mistura credit assignment multi-agente; assume simetria de recompensas                                       |
-| VDN                | Double-DQN não é no paper, é enhancement                          | BAIXO      | Enhancement não documentada                                                                                  |
-| QMIX (Rashid 2018) | **Separate per-agent optimizer step não no paper**                | CRÍTICO    | Treina mixer separado; depois agentes separados com loss `(target-curr).detach() * Q_i` → não é QMIX correto |
-| QMIX               | Parâmetro non-sharing (paper usa single shared net)               | MÉDIO      | Multiplicação de parâmetros; convergência potencialmente mais lenta                                          |
-| QMIX               | Reward summing (como VDN)                                         | MÉDIO      | Idem                                                                                                         |
-| QMIX               | Dois-layer hypernetworks (paper usa single linear)                | BAIXO      | Enhancement, não desvio (improvement                                                                         |
-| MAPPO (Yu 2022)    | **Epsilon-greedy em ator estocástico**                            | CRÍTICO    | Quebra on-policy assumption; IS ratio corrompida                                                             |
-| MAPPO              | Sem value clipping (PPO padrão tem)                               | MÉDIO      | Grandes saltos em V(s) podem desestabilizar                                                                  |
-| MAPPO              | Vantagens reutilizadas em múltiplos epochs sem recompute          | BAIXO      | Standard PPO, não é desvio; comentário seria útil                                                            |
-| MAPPO              | Multiplicativo epsilon-decay vs linear em otros                   | BAIXO      | Não documentado; fundamentação teórica ausente                                                               |
-| HATRPO (Kuba 2021) | **Implementado como HAPPO, não HATRPO**                           | CRÍTICO    | Usa PPO clip, não KL trust-region com sequential updates                                                     |
-| HATRPO             | Team reward para todos agentes (paper: per-agent)                 | MÉDIO      | Mistura credit assignment                                                                                    |
-| HATRPO             | `actor_old` atualizado frequently (não apenas per-iteration)      | MÉDIO      | Trust-region reference não é mantido corretamente                                                            |
-| HATRPO             | Epsilon-greedy                                                    | CRÍTICO    | Idem MAPPO                                                                                                   |
-| HATRPO             | Critic soft-update não no paper                                   | BAIXO      | Enhancement                                                                                                  |
+| Agente             | Desvio                                                            | Severidade  | Impacto                                                                                                      |
+| ------------------ | ----------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| IDQN (Mnih 2015)   | Sem beta annealing em PER (VDN tem, IDQN não)                     | MÉDIO       | Importância-sampling bias não corrigida ao final do treino                                                   |
+| IDQN               | Sem fallback hard-update se `USE_SOFT_UPDATE=False`               | BAIXO       | Soft-update é apenas mecanismo; hard-update nunca acionado                                                   |
+| VDN (Sunehag 2017) | Usa observação global para todos os agentes (paper usa obs local) | MÉDIO       | Viola decentralized execution —não é realmente descentralizável em tempo de teste                            |
+| VDN                | Recompensas somadas (em vez de team reward único)                 | MÉDIO       | Mistura credit assignment multi-agente; assume simetria de recompensas                                       |
+| VDN                | Double-DQN não é no paper, é enhancement                          | BAIXO       | Enhancement não documentada                                                                                  |
+| QMIX (Rashid 2018) | **Separate per-agent optimizer step não no paper**                | CRÍTICO     | Treina mixer separado; depois agentes separados com loss `(target-curr).detach() * Q_i` → não é QMIX correto |
+| QMIX               | Parâmetro non-sharing (paper usa single shared net)               | MÉDIO       | Multiplicação de parâmetros; convergência potencialmente mais lenta                                          |
+| QMIX               | Reward summing (como VDN)                                         | MÉDIO       | Idem                                                                                                         |
+| QMIX               | Dois-layer hypernetworks (paper usa single linear)                | BAIXO       | Enhancement, não desvio (improvement                                                                         |
+| MAPPO (Yu 2022)    | ~~Epsilon-greedy em ator estocástico~~                            | ~~CRÍTICO~~ | ✅ CORRIGIDO em B4 — `Categorical(probs).sample()` — IS ratio válido                                         |
+| MAPPO              | Sem value clipping (PPO padrão tem)                               | MÉDIO       | Grandes saltos em V(s) podem desestabilizar                                                                  |
+| MAPPO              | Vantagens reutilizadas em múltiplos epochs sem recompute          | BAIXO       | Standard PPO, não é desvio; comentário seria útil                                                            |
+| MAPPO              | Multiplicativo epsilon-decay vs linear em outros                  | BAIXO       | Não documentado; fundamentação teórica ausente                                                               |
+| HATRPO (Kuba 2021) | **Implementado como HAPPO, não HATRPO**                           | CRÍTICO     | Usa PPO clip, não KL trust-region com sequential updates                                                     |
+| HATRPO             | Team reward para todos agentes (paper: per-agent)                 | MÉDIO       | Mistura credit assignment                                                                                    |
+| HATRPO             | `actor_old` atualizado frequently (não apenas per-iteration)      | MÉDIO       | Trust-region reference não é mantido corretamente                                                            |
+| HATRPO             | ~~Epsilon-greedy~~                                                | ~~CRÍTICO~~ | ✅ CORRIGIDO em B4 — mesmos fixes que MAPPO                                                                  |
+| HATRPO             | Critic soft-update não no paper                                   | BAIXO       | Enhancement                                                                                                  |
 
 ---
 
@@ -967,7 +967,7 @@ class BaseConfig:
 
 3. ~~**I8**: ThreadPoolExecutor de `select_action` em `training.py`~~ ✅ CORRIGIDO
 4. **N7**: Unificar runners (longo prazo) — 🔴 PENDENTE
-5. **M5/M6**: Unificar `device` e adicionar `RANDOM_SEED` aos configs
+5. ~~**M5**: Device unificado~~ ✅ CORRIGIDO em Fase 8; **M6**: `RANDOM_SEED` nos configs — 🔴 PENDENTE
 
 ### Média (organização)
 
@@ -1102,12 +1102,10 @@ N10 e I5 estavam marcadas como ✅ CORRIGIDO mas **não estavam efetivamente imp
 
 ### N15 — `LEARNING_STARTS` ignorado em MAPPO, HATRPO e QMIX
 
-**Severidade**: 🟢 BAIXO — 🔴 PENDENTE  
-**Arquivos**: `src/config.py:173-174, 187`
+**Severidade**: 🟢 BAIXO — **✅ CORRIGIDO** (Fase 9)  
+**Arquivos**: `src/agents/mappo.py`, `src/agents/hatrpo.py`, `src/agents/qmix.py`
 
-**Descrição**: `MAPPOConfig.LEARNING_STARTS = 1000` e `HATRPOConfig.LEARNING_STARTS = 1000` estão definidos mas nunca verificados — `update()`/`update_actor()` são chamados desde o primeiro episódio. `QMIXTrainer.optimize()` também não verifica `steps_done` ou `learning_starts`.
-
-**Correção esperada**: Adicionar verificação nos respectivos métodos `update()`/`optimize()` ou remover dos configs.
+**Correção aplicada**: Guards adicionados em `MAPPOAgent.update()`, `HATRPOAgentOptimized.update_actor()` e `QMIXTrainer.optimize()`.
 
 ---
 
@@ -1122,12 +1120,10 @@ N10 e I5 estavam marcadas como ✅ CORRIGIDO mas **não estavam efetivamente imp
 
 ### N17 — VDN `_get_beta` superestima denominador do annealing
 
-**Severidade**: 🟡 MÉDIO — 🔴 PENDENTE  
+**Severidade**: 🟡 MÉDIO — **✅ CORRIGIDO** (Fase 9)  
 **Arquivo**: `src/agents/vdn.py:67-73`
 
-**Descrição**: `_get_beta()` calcula fração como `steps_done / (EPISODES_TOTAL * MAX_STEPS)`. Isso pressupõe que todo episódio dura `MAX_STEPS` passos. Episódios bem-sucedidos terminam mais cedo, então o denominador é superestimado e o annealing do beta fica mais lento que o ideal.
-
-**Correção esperada**: Usar `steps_done` real em vez de `EPISODES_TOTAL * MAX_STEPS`, ou rastrear steps reais.
+**Correção aplicada**: `_get_beta()` agora usa `_total_train_steps` se disponível; caso contrário, mantém o default como fallback.
 
 ---
 
@@ -1168,9 +1164,9 @@ N10 e I5 estavam marcadas como ✅ CORRIGIDO mas **não estavam efetivamente imp
 | **N11 (beta annealing quebrado)**   | **✅** | N/A    | N/A    | N/A    | N/A    | N/A    |
 | N12/N13 (epsilon dead code)         | N/A    | N/A    | N/A    | N/A    | 📝     | 📝     |
 | N14 (value_loss_coef)               | N/A    | N/A    | N/A    | N/A    | **✅** | N/A    |
-| N15 (learning_starts ignorado)      | ✅     | N/A    | ✅     | 🔴     | 🔴     | 🔴     |
+| N15 (learning_starts ignorado)      | ✅     | N/A    | ✅     | **✅** | **✅** | **✅** |
 | N16 (QMIX sem learning_starts)      | N/A    | N/A    | N/A    | **✅** | N/A    | N/A    |
-| N17 (VDN beta annealing lento)      | N/A    | N/A    | 🔴     | N/A    | N/A    | N/A    |
+| N17 (VDN beta annealing lento)      | N/A    | N/A    | **✅** | N/A    | N/A    | N/A    |
 | N18 (distance_traveled não plotado) | **✅** | **✅** | **✅** | **✅** | **✅** | **✅** |
 
 **Legenda**: ✅ = corrigido / 📝 = documentado, sem correção (intencional) / 🔴 = pendente / N/A = não se aplica
