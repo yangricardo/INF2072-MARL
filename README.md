@@ -372,24 +372,37 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 
 ## Diagramas UML
 
-Os diagramas PlantUML estão em [`Esquemáticos/`](Esquemáticos/). Para gerar as imagens PNG, instale o [PlantUML](https://plantuml.com/starting) e execute:
+### Visão Geral da Arquitetura
 
-```bash
-plantuml Esquemáticos/*.puml
-```
+![Arquitetura Geral](Esquemáticos/architecture_overview.png)
 
-Ou visualize individualmente em [plantuml.com/plantuml](https://www.plantuml.com/plantuml/uml/).
+### Diagramas de Classes
+
+**Infraestrutura (config, environment, networks, buffers):**
+
+![Classes — Infraestrutura](Esquemáticos/class_diagram.png)
+
+**Agentes (IDQN, VDN, QMIX, MAPPO, HATRPO):**
+
+![Classes — Agentes](Esquemáticos/class_diagram_agents.png)
+
+### Fluxos de Treino
 
 | Diagrama                                                                | Tipo        | Descrição                                                                                  |
 | ----------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------ |
-| [`architecture_overview.puml`](Esquemáticos/architecture_overview.puml) | Componentes | Visão geral — pacotes e dependências entre módulos de `src/`                               |
-| [`class_diagram.puml`](Esquemáticos/class_diagram.puml)                 | Classes     | Infraestrutura: config, environment, networks e buffers                                    |
-| [`class_diagram_agents.puml`](Esquemáticos/class_diagram_agents.puml)   | Classes     | Agentes: off-policy (IDQN/VDN/QMIX) e on-policy (MAPPO/HATRPO)                             |
 | [`sequence_qmix.puml`](Esquemáticos/sequence_qmix.puml)                 | Sequência   | Um passo de treino QMIX: epsilon-greedy → step → optimize (mixer + loss contrafactual)     |
 | [`sequence_mappo.puml`](Esquemáticos/sequence_mappo.puml)               | Sequência   | Episódio e atualização MAPPO: coleta de trajetória → GAE → PPO multi-época                 |
 | [`sequence_hatrpo.puml`](Esquemáticos/sequence_hatrpo.puml)             | Sequência   | Episódio e atualização HATRPO: buffer de trajetória → GAE → trust-region update sequencial |
 | [`environment_flow.puml`](Esquemáticos/environment_flow.puml)           | Atividade   | Fluxo de `WarehouseEnv.step()`: movimento, interação, shaping e bônus terminal             |
 | [`training_pipeline.puml`](Esquemáticos/training_pipeline.puml)         | Atividade   | Pipeline multi-sessão de `training.py` (IDQN/Random): checkpoints, métricas e vídeo        |
+
+**Para gerar as imagens PNG dos diagramas**, instale o [PlantUML](https://plantuml.com/starting) e execute:
+
+```bash
+plantuml Esquemáticos/*.puml
+```
+
+Ou visualize online em [plantuml.com/plantuml](https://www.plantuml.com/plantuml/uml/).
 
 ---
 
