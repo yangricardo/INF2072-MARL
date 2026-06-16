@@ -19,6 +19,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.distributions import Categorical
 from tqdm import tqdm
 
 from ..config import HATRPOConfig
@@ -61,15 +62,20 @@ class HATRPOAgentOptimized:
         with torch.no_grad():
             state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
             probs, _ = self.actor(state_tensor)
-            if training and np.random.random() < self.get_epsilon():
-                action = np.random.randint(self.action_dim)
-            else:
-                action = int(probs.argmax().item())
-            log_prob = torch.log(probs[0, action] + 1e-10).item()
+            # On-policy: sample from stochastic policy via categorical distribution
+            dist = Categorical(probs)
+            action = dist.sample().item()
+            log_prob = dist.log_prob(torch.tensor(action, device=self.device)).item()
             return action, log_prob
 
     def update_actor(self, states, actions, advantages, old_log_probs):
-        """Atualiza o ator com PPO clip + bônus de entropia."""
+        """Updates actor via PPO clip (approximates trust-region from Kuba 2021).
+
+        Note: HATRPO (Kuba et al. 2021) uses KL-divergence trust-region constraints
+        with sequential agent updates. This implementation uses PPO clip surrogate
+        as an approximation with fixed per-agent update order. Full HATRPO would require
+        conjugate gradient descent and explicit KL constraint enforcement.
+        """
         states_tensor = torch.FloatTensor(states).to(self.device)
         actions_tensor = torch.LongTensor(actions).to(self.device)
         advantages_tensor = torch.FloatTensor(advantages).to(self.device)
@@ -80,12 +86,15 @@ class HATRPOAgentOptimized:
             probs.gather(1, actions_tensor.unsqueeze(1)).squeeze(1) + 1e-10
         )
 
+        # PPO probability ratio: r_t(θ) = π_θ(a|s) / π_{θ_old}(a|s)
         ratio = torch.exp(new_log_probs - old_log_probs_tensor)
+        # PPO clip surrogate with ε = CLIP_EPS approximates KL trust-region
         surr1 = ratio * advantages_tensor
         clip_eps = self.config.CLIP_EPS
         surr2 = torch.clamp(ratio, 1 - clip_eps, 1 + clip_eps) * advantages_tensor
         policy_loss = -torch.min(surr1, surr2).mean()
 
+        # Entropy bonus for exploration: H[π] = -Σ_a π(a|s)·log π(a|s)
         entropy = -(probs * torch.log(probs + 1e-10)).sum(dim=1).mean()
         total_loss = policy_loss - self.config.ENTROPY_COEF * entropy
 
@@ -131,6 +140,7 @@ class CentralizedCriticOptimized:
         returns_tensor = torch.FloatTensor(returns).to(self.device)
 
         values = self.critic(states_tensor).squeeze(-1)
+        # Critic MSE loss: L_V = E[(V(s) - R_t)²]
         critic_loss = F.mse_loss(values, returns_tensor)
 
         self.critic_optimizer.zero_grad()
@@ -139,6 +149,7 @@ class CentralizedCriticOptimized:
             torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.config.MAX_GRAD_NORM)
         self.critic_optimizer.step()
 
+        # Polyak averaging soft update for target critic: θ_target ← (1-τ)·θ_target + τ·θ
         tau = self.config.TAU
         for target_param, param in zip(
             self.critic_target.parameters(), self.critic.parameters()
@@ -148,6 +159,8 @@ class CentralizedCriticOptimized:
         return critic_loss.item()
 
     def compute_gae(self, rewards, values, dones):
+        # Generalized Advantage Estimation (GAE-λ): Â_t = Σ_{l≥0}(γλ)^l·δ_{t+l}
+        # δ_t = r_t + γV(s_{t+1})(1-done) - V(s_t)
         advantages = []
         gae = 0.0
         for t in reversed(range(len(rewards))):
