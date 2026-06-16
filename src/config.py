@@ -63,7 +63,8 @@ class IDQNConfig(BaseConfig):
     BUFFER_SIZE = 500000
     PRIORITIZED_REPLAY = True
     ALPHA = 0.6
-    BETA = 0.4
+    BETA_START = 0.4
+    BETA_END = 1.0
 
     # Treinamento
     MAX_GRAD_NORM = 1.0
