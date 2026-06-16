@@ -155,12 +155,13 @@ class CentralizedCriticOptimized:
             torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.config.MAX_GRAD_NORM)
         self.critic_optimizer.step()
 
-        # Polyak averaging soft update for target critic: θ_target ← (1-τ)·θ_target + τ·θ
-        tau = self.config.TAU
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_((1 - tau) * target_param.data + tau * param.data)
+        # Polyak averaging soft update for target critic — vetorizado via _foreach_lerp_
+        # θ_target ← (1-τ)·θ_target + τ·θ
+        torch._foreach_lerp_(
+            list(self.critic_target.parameters()),
+            list(self.critic.parameters()),
+            self.config.TAU,
+        )
 
         return critic_loss.item()
 
