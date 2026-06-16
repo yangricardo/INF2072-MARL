@@ -76,14 +76,16 @@ class IDQNAgent:
         return max(self.config.EPSILON_END, epsilon)
 
     def select_action(self, state, training=True):
-        self.steps_done += 1
+
+        if training:
+            self.steps_done += 1
 
         if training and random.random() < self.get_epsilon():
             return random.randrange(self.action_dim)
 
         with torch.no_grad():
             self.policy_net.eval()
-            state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+            state_tensor = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
             q_values = self.policy_net(state_tensor)
             if training:
                 self.policy_net.train()
@@ -104,9 +106,6 @@ class IDQNAgent:
 
         self.learning_steps += 1
 
-        if self.learning_steps % self.config.TRAIN_FREQ != 0:
-            return 0
-
         weights = None
         indices = None
         if self.config.PRIORITIZED_REPLAY:
@@ -124,11 +123,11 @@ class IDQNAgent:
             batch = random.sample(self.memory, self.config.BATCH_SIZE)  # type: ignore[arg-type]
             states, actions, rewards, next_states, dones = zip(*batch)
 
-        states = torch.FloatTensor(np.array(states)).to(self.device)
-        actions = torch.LongTensor(np.array(actions)).to(self.device)
-        rewards = torch.FloatTensor(np.array(rewards)).to(self.device)
-        next_states = torch.FloatTensor(np.array(next_states)).to(self.device)
-        dones = torch.FloatTensor(np.array(dones)).to(self.device)
+        states = torch.as_tensor(np.array(states), dtype=torch.float32, device=self.device)
+        actions = torch.as_tensor(np.array(actions), dtype=torch.long, device=self.device)
+        rewards = torch.as_tensor(np.array(rewards), dtype=torch.float32, device=self.device)
+        next_states = torch.as_tensor(np.array(next_states), dtype=torch.float32, device=self.device)
+        dones = torch.as_tensor(np.array(dones), dtype=torch.float32, device=self.device)
 
         with torch.no_grad():
             # Double-DQN: y = r + γ·Q_target(s', argmax_a' Q_policy(s',a'))·(1-done)
