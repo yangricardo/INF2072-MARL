@@ -3,7 +3,7 @@
 Análise completa do código em `src/` e subdiretórios, identificando bugs, inconsistências, código duplicado e oportunidades de otimização.
 
 **Data da revisão inicial**: 2026-06-15  
-**Última atualização**: 2026-06-16 (Fase 5: diagnóstico IDQN + Fase 6: análise cruzada)  
+**Última atualização**: 2026-06-16 (Fase 9: alinhamento com papers + correções)  
 **Escopo**: src/ (agents/, config.py, environment.py, evaluation.py, main.py, networks.py, replay_buffer.py, training.py)
 
 ---
@@ -1017,6 +1017,25 @@ Device centralizado via `DEVICE = get_device()` com detecção automática CUDA 
 
 ---
 
+## 🆕 Fase 9 — Alinhamento com Papers + Correções (2026-06-16)
+
+### Correções aplicadas
+
+| ID      | Arquivo                               | Descrição                                                                                                                        | Prioridade |
+| ------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| **N10** | `main.py`                             | `_bg_pool.shutdown(wait=True)` adicionado no `finally` — garante que vídeo/plot em background sejam salvos                       | 🟠 ALTO    |
+| **I5**  | `training.py`                         | `distance_traveled` adicionado ao CSV export de `consolidated_metrics.csv`                                                       | 🟡 MÉDIO   |
+| **N14** | `agents/mappo.py`                     | `critic_loss` agora é multiplicado por `VALUE_LOSS_COEF = 0.5` — alinhado com papers PPO que usam coeficiente na loss do crítico | 🟡 MÉDIO   |
+| **E1**  | `agents/mappo.py`, `agents/hatrpo.py` | Já implementado (append+reverse) — O(n), não O(n²)                                                                               | ✅         |
+| **N18** | `evaluation.py`                       | Subplot 6 substituído por gráfico de "Distância Percorrida" (com fallback para resumo se ausente)                                | 🟢 BAIXO   |
+| **N16** | `agents/qmix.py`                      | `QMIXTrainer.optimize()` agora verifica `_total_steps < LEARNING_STARTS` antes de treinar                                        | 🟡 MÉDIO   |
+
+### Correções de documentos de status incorretas
+
+N10 e I5 estavam marcadas como ✅ CORRIGIDO mas **não estavam efetivamente implementadas** no código. Agora estão.
+
+---
+
 ## 🆕 Fase 7 — Lacunas de Implementação e Otimização (2026-06-16)
 
 ### N9 — `_optimize_pool.shutdown()` ausente — threads não liberadas entre sessões
@@ -1074,12 +1093,10 @@ Device centralizado via `DEVICE = get_device()` com detecção automática CUDA 
 
 ### N14 — `VALUE_LOSS_COEF` nunca usado no MAPPO
 
-**Severidade**: 🟡 MÉDIO — 🔴 PENDENTE  
+**Severidade**: 🟡 MÉDIO — **✅ CORRIGIDO** (Fase 9)  
 **Arquivo**: `src/config.py:165`, `src/agents/mappo.py:159`
 
-**Descrição**: `MAPPOConfig.VALUE_LOSS_COEF = 0.5` está definido no config, mas a loss do crítico é `F.mse_loss(batch_values, batch_returns)` sem multiplicação pelo coeficiente.
-
-**Correção esperada**: Multiplicar `critic_loss` por `self.config.VALUE_LOSS_COEF`.
+**Correção aplicada**: `critic_loss = self.config.VALUE_LOSS_COEF * F.mse_loss(batch_values, batch_returns)`
 
 ---
 
@@ -1096,12 +1113,10 @@ Device centralizado via `DEVICE = get_device()` com detecção automática CUDA 
 
 ### N16 — QMIXTrainer não verifica `LEARNING_STARTS`
 
-**Severidade**: 🟡 MÉDIO — 🔴 PENDENTE  
+**Severidade**: 🟡 MÉDIO — **✅ CORRIGIDO** (Fase 9)  
 **Arquivo**: `src/agents/qmix.py:117`
 
-**Descrição**: O `QMIXTrainer.optimize()` verifica apenas `len(memory) < BATCH_SIZE`. Diferente do IDQN/VDN, não há guard de `LEARNING_STARTS`. Se o buffer encher rápido, o treino começa antes de coleta significativa.
-
-**Correção esperada**: Adicionar guard `steps_done < LEARNING_STARTS`, compartilhando o contador dos `QMIXAgent`.
+**Correção aplicada**: Adicionado `_total_steps` ao `QMIXTrainer`; `optimize()` agora retorna 0 se `_total_steps < LEARNING_STARTS`.
 
 ---
 
@@ -1118,12 +1133,10 @@ Device centralizado via `DEVICE = get_device()` com detecção automática CUDA 
 
 ### N18 — `distance_traveled` nunca plotado
 
-**Severidade**: 🟢 BAIXO — 🔴 PENDENTE  
+**Severidade**: 🟢 BAIXO — **✅ CORRIGIDO** (Fase 9)  
 **Arquivo**: `src/evaluation.py`
 
-**Descrição**: `distance_traveled` é coletado e consolidado nas métricas, mas `plot_consolidated_results()` não inclui um subplot para esta métrica.
-
-**Correção esperada**: Substituir o painel de resumo (subplot 6) por um gráfico de distância percorrida.
+**Correção aplicada**: Subplot 6 substituído por gráfico de "Distância Percorrida" com fallback para painel de resumo se ausente.
 
 ---
 
@@ -1154,11 +1167,11 @@ Device centralizado via `DEVICE = get_device()` com detecção automática CUDA 
 | **N10 (bg_pool não aguardado)**     | **✅** | **✅** | **✅** | **✅** | **✅** | **✅** |
 | **N11 (beta annealing quebrado)**   | **✅** | N/A    | N/A    | N/A    | N/A    | N/A    |
 | N12/N13 (epsilon dead code)         | N/A    | N/A    | N/A    | N/A    | 📝     | 📝     |
-| N14 (value_loss_coef)               | N/A    | N/A    | N/A    | N/A    | 🔴     | N/A    |
+| N14 (value_loss_coef)               | N/A    | N/A    | N/A    | N/A    | **✅** | N/A    |
 | N15 (learning_starts ignorado)      | ✅     | N/A    | ✅     | 🔴     | 🔴     | 🔴     |
-| N16 (QMIX sem learning_starts)      | N/A    | N/A    | N/A    | 🔴     | N/A    | N/A    |
+| N16 (QMIX sem learning_starts)      | N/A    | N/A    | N/A    | **✅** | N/A    | N/A    |
 | N17 (VDN beta annealing lento)      | N/A    | N/A    | 🔴     | N/A    | N/A    | N/A    |
-| N18 (distance_traveled não plotado) | 🔴     | 🔴     | 🔴     | 🔴     | 🔴     | 🔴     |
+| N18 (distance_traveled não plotado) | **✅** | **✅** | **✅** | **✅** | **✅** | **✅** |
 
 **Legenda**: ✅ = corrigido / 📝 = documentado, sem correção (intencional) / 🔴 = pendente / N/A = não se aplica
 
