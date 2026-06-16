@@ -38,6 +38,63 @@ Análise completa do código em `src/` e subdiretórios, identificando bugs, inc
 
 ---
 
+## 🔄 Revisão Teórica & Documentação (Fase 2)
+
+Fase 2 iniciada em 2026-06-15: audit teórico completo dos 6 agentes contra papers originais.
+
+### Bugs Adicionais Descobertos na Auditoria
+
+| ID | Arquivo | Status | Descrição |
+|---|---|---|---|
+| B1 | src/environment.py | TODO | `_pickup_box()` sem guard: robô já carregando caixa pode silenciosamente trocar de caixa, orphaning a primeira |
+| B2 | src/environment.py | TODO | `robot_carrying` declarado como `{}` em `__init__`, inicializado apenas em `reset()` — qualquer chamada antes do reset lança `KeyError` |
+| B3 | src/replay_buffer.py | TODO | **Double-alpha em `PrioritizedReplayBuffer.sample()` e `QMIXPrioritizedReplayBuffer.sample()`**: `update_priorities` armazena `(|td|+eps)^alpha`, `sample()` re-aplica `alpha` → probabilities ∝ `(|td|+eps)^(alpha²)` |
+| B4 | src/agents/mappo.py, hatrpo.py | TODO | **Epsilon-greedy corrompe log_prob em PPO**: quando ε ativa ação random, `log_prob` armazenado é do greedy, não do random → IS ratio inválida em atualização |
+
+### Desvios Teóricos vs Papers Originais
+
+| Agente | Desvio | Severidade | Impacto |
+|--------|--------|-----------|---------|
+| IDQN (Mnih 2015) | Sem beta annealing em PER (VDN tem, IDQN não) | MÉDIO | Importância-sampling bias não corrigida ao final do treino |
+| IDQN | Sem fallback hard-update se `USE_SOFT_UPDATE=False` | BAIXO | Soft-update é apenas mecanismo; hard-update nunca acionado |
+| VDN (Sunehag 2017) | Usa observação global para todos os agentes (paper usa obs local) | MÉDIO | Viola decentralized execution —não é realmente descentralizável em tempo de teste |
+| VDN | Recompensas somadas (em vez de team reward único) | MÉDIO | Mistura credit assignment multi-agente; assume simetria de recompensas |
+| VDN | Double-DQN não é no paper, é enhancement | BAIXO | Enhancement não documentada |
+| QMIX (Rashid 2018) | **Separate per-agent optimizer step não no paper** | CRÍTICO | Treina mixer separado; depois agentes separados com loss `(target-curr).detach() * Q_i` → não é QMIX correto |
+| QMIX | Parâmetro non-sharing (paper usa single shared net) | MÉDIO | Multiplicação de parâmetros; convergência potencialmente mais lenta |
+| QMIX | Reward summing (como VDN) | MÉDIO | Idem |
+| QMIX | Dois-layer hypernetworks (paper usa single linear) | BAIXO | Enhancement, não desvio (improvement |
+| MAPPO (Yu 2022) | **Epsilon-greedy em ator estocástico** | CRÍTICO | Quebra on-policy assumption; IS ratio corrompida |
+| MAPPO | Sem value clipping (PPO padrão tem) | MÉDIO | Grandes saltos em V(s) podem desestabilizar |
+| MAPPO | Vantagens reutilizadas em múltiplos epochs sem recompute | BAIXO | Standard PPO, não é desvio; comentário seria útil |
+| MAPPO | Multiplicativo epsilon-decay vs linear em otros | BAIXO | Não documentado; fundamentação teórica ausente |
+| HATRPO (Kuba 2021) | **Implementado como HAPPO, não HATRPO** | CRÍTICO | Usa PPO clip, não KL trust-region com sequential updates |
+| HATRPO | Team reward para todos agentes (paper: per-agent) | MÉDIO | Mistura credit assignment |
+| HATRPO | `actor_old` atualizado frequently (não apenas per-iteration) | MÉDIO | Trust-region reference não é mantido corretamente |
+| HATRPO | Epsilon-greedy | CRÍTICO | Idem MAPPO |
+| HATRPO | Critic soft-update não no paper | BAIXO | Enhancement |
+
+### Comentários Matemáticos Ausentes (Fase 2 task)
+
+**Todos os 6 agentes + networks + environment precisam de comentários inline com fórmulas**:
+
+- `src/agents/idqn.py`: Double-DQN target, PER loss, soft update
+- `src/agents/vdn.py`: VDN factorization, beta annealing, target
+- `src/agents/qmix.py`: QMIX loss, monotonicity (já tem parcial), nota sobre desvio
+- `src/agents/mappo.py`: GAE, PPO surrogate, returns, entropy
+- `src/agents/hatrpo.py`: GAE, PPO surrogate + nota "implementa aproximação", soft update
+- `src/networks.py`: QMixer forward (monotonic), residual blocks, softmax
+- `src/environment.py`: Manhattan distance, reward shaping, normalization, terminal bonus guard
+
+### README com KaTeX (Fase 2 task)
+
+Seções IDQN, VDN, QMIX, MAPPO, HATRPO, Redes Neurais precisam ser enriquecidas com `$$...$$` blocos KaTeX:
+- Fórmulas de loss, targets, GAE, PPO, trust-region
+- Fórmulas de rede (QMixer forward, residual, softmax)
+- Fórmulas de buffer (PER priority, IS weights)
+
+---
+
 ---
 
 ## 🔴 Bugs Críticos (afetam correção dos algoritmos)
