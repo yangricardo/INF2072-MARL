@@ -23,7 +23,7 @@ import torch.optim as optim
 from torch.distributions import Categorical
 from tqdm import tqdm
 
-from ..config import HATRPOConfig
+from ..config import DEVICE, HATRPOConfig
 from ..environment import WarehouseEnv
 from ..evaluation import plot_consolidated_results, record_policy_video
 from ..networks import ImprovedActorNetwork, ImprovedCriticNetwork
@@ -34,7 +34,7 @@ class HATRPOAgentOptimized:
         self.agent_id = agent_id
         self.action_dim = action_dim
         self.config = config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = DEVICE
 
         self.actor = ImprovedActorNetwork(
             state_dim, action_dim, config.HIDDEN_DIM, config.NUM_LAYERS, config.DROPOUT_RATE
@@ -121,7 +121,7 @@ class HATRPOAgentOptimized:
 class CentralizedCriticOptimized:
     def __init__(self, global_state_dim, config):
         self.config = config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = DEVICE
 
         self.critic = ImprovedCriticNetwork(
             global_state_dim, config.HIDDEN_DIM, config.NUM_LAYERS, config.DROPOUT_RATE
