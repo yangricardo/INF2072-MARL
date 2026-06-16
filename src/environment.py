@@ -132,15 +132,14 @@ class WarehouseEnv(gym.Env):
 
     def _min_distance_to_boxes(self, robot_id):
         robot_pos = self.robot_positions[robot_id]
-        # Usa active_box_indices (cache de reset()) para evitar O(n²) com list.index()
-        min_dist = 100  # valor default equivalente ao max_steps
+        min_dist = 100  
         for box_id in self._active_box_indices:
             box_pos = self.box_positions[box_id]
             if box_pos is not None and not self.delivered_boxes[box_id]:
                 dist = abs(robot_pos[0] - box_pos[0]) + abs(robot_pos[1] - box_pos[1])
                 if dist < min_dist:
                     min_dist = dist
-        return 0 if min_dist == 100 else min_dist
+        return 100 if min_dist == 100 else min_dist
 
     def _is_valid_position(self, pos, robot_id=None):
         i, j = pos
@@ -209,21 +208,43 @@ class WarehouseEnv(gym.Env):
                 self.grid[robot_pos[0]][robot_pos[1]] = f"R{robot_id + 1}"
                 return 25.0
 
-        return -25.0  # Penalização severa para soltar fora do alvo, incentivando precisão
+        return -2.0
 
     def _calculate_shaped_reward(self, robot_id, base_reward):
         reward = base_reward
 
-        current_distance = self._min_distance_to_boxes(robot_id)
+        # 1. Identifica o estado dinâmico: o que importa para este robô agora?
+        box_with_robot = self.robot_carrying[robot_id]
+        
+        if box_with_robot is not None:
+            # Se o robô ESTÁ carregando uma caixa, o objetivo dele é o alvo "B" mais próximo
+            robot_pos = self.robot_positions[robot_id]
+            current_distance = min(
+                [
+                    abs(robot_pos[0] - target_pos[0]) + abs(robot_pos[1] - target_pos[1])
+                    for target_pos in self.targets
+                ],
+                default=100,
+            )
+        else:
+            # Se o robô NÃO está carregando, o objetivo dele é a caixa "A" mais próxima do chão
+            current_distance = self._min_distance_to_boxes(robot_id)
+
+        # 2. Proteção de Transição: Se a ação do passo foi um Pick ou Drop de sucesso,
+        # apenas atualizamos o histórico de distância sem aplicar diferenciais (evita distorções)
+        if base_reward in [2.0, 25.0, -2.0]:
+            self.previous_distances[robot_id] = current_distance
+            return reward
+
         previous_distance = self.previous_distances[robot_id]
 
+        # 3. Computa o ganho ou perda de proximidade em relação ao objetivo atual legítimo
         if current_distance < previous_distance:
             reward += 0.1 * (previous_distance - current_distance)
         elif current_distance > previous_distance:
             reward -= 0.02 * (current_distance - previous_distance)
 
         self.previous_distances[robot_id] = current_distance
-
         return reward
 
     def _get_observation(self):
@@ -321,8 +342,22 @@ class WarehouseEnv(gym.Env):
             else:
                 interaction_rewards.append(0)
 
+        # Identifica se houve uma mudança macro de estado no mapa para a equipa
+        macro_change = any(r in [2.0, 25.0] for r in interaction_rewards)
+
         for robot_id in range(self.num_robots):
             base_reward = movement_rewards[robot_id] + interaction_rewards[robot_id]
+            
+            # CORREÇÃO CRÍTICA: Se o mapa mudou, recalibra o histórico de ambos para evitar picos
+            if macro_change:
+                box_with_robot = self.robot_carrying[robot_id]
+                if box_with_robot is not None:
+                    r_pos = self.robot_positions[robot_id]
+                    current_dist = min([abs(r_pos[0]-t[0]) + abs(r_pos[1]-t[1]) for t in self.targets], default=100)
+                else:
+                    current_dist = self._min_distance_to_boxes(robot_id)
+                self.previous_distances[robot_id] = current_dist
+
             shaped_reward = self._calculate_shaped_reward(robot_id, base_reward)
             rewards[robot_id] = shaped_reward
             total_reward += shaped_reward
