@@ -61,8 +61,11 @@ class HATRPOAgentOptimized:
     def select_action(self, state, training=True):
         self.steps_done += 1
         with torch.no_grad():
+            self.actor.eval()
             state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
             probs, _ = self.actor(state_tensor)
+            if training:
+                self.actor.train()
             # On-policy: sample from stochastic policy via categorical distribution
             dist = Categorical(probs)
             action = dist.sample().item()
@@ -82,10 +85,12 @@ class HATRPOAgentOptimized:
         advantages_tensor = torch.FloatTensor(advantages).to(self.device)
         old_log_probs_tensor = torch.FloatTensor(old_log_probs).to(self.device)
 
+        self.actor.eval()
         probs, _ = self.actor(states_tensor)
         new_log_probs = torch.log(
             probs.gather(1, actions_tensor.unsqueeze(1)).squeeze(1) + 1e-10
         )
+        self.actor.train()
 
         # PPO probability ratio: r_t(θ) = π_θ(a|s) / π_{θ_old}(a|s)
         ratio = torch.exp(new_log_probs - old_log_probs_tensor)
