@@ -977,6 +977,155 @@ class BaseConfig:
 
 ---
 
+---
+
+## 🆕 Fase 7 — Lacunas de Implementação e Otimização (2026-06-16)
+
+### N9 — `_optimize_pool.shutdown()` ausente — threads não liberadas entre sessões
+
+**Severidade**: 🟠 ALTO — **✅ CORRIGIDO**  
+**Arquivo**: `src/training.py`
+
+**Descrição**: O `ThreadPoolExecutor` criado para otimização paralela (`_optimize_pool`) nunca era desligado ao final de `train_session()`. Em treinos multi-sessão, cada sessão criava um novo pool sem liberar o anterior.
+
+**Correção aplicada**: Adicionado `_optimize_pool.shutdown(wait=True)` ao final de `train_session()`.
+
+---
+
+### N10 — `_bg_pool` não aguardado — PNG/MP4 podem não ser salvos
+
+**Severidade**: 🟠 ALTO — **✅ CORRIGIDO**  
+**Arquivo**: `src/evaluation.py`, `src/main.py`
+
+**Descrição**: As tarefas de background (`_save_video`, `_save_plot`) são submetidas ao `_bg_pool` mas nunca aguardadas. Como o programa encerra imediatamente após `run_training()` retornar, o PNG consolidado e o MP4 podem nunca terminar de ser escritos no disco.
+
+**Correção aplicada**: Adicionado `_bg_pool.shutdown(wait=True)` em `evaluation.py`.
+
+---
+
+### N11 — `set_total_train_steps()` nunca chamado — PER beta annealing não funciona
+
+**Severidade**: 🟡 MÉDIO — **✅ CORRIGIDO**  
+**Arquivo**: `src/training.py`, `src/agents/idqn.py`
+
+**Descrição**: `IDQNAgent.set_total_train_steps()` é o método que define `_total_steps` no `PrioritizedReplayBuffer`, permitindo o annealing do beta de `BETA_START=0.4` para `BETA_END=1.0`. Porém, **nunca era chamado** no `run_training()`. Sem `_total_steps`, `_get_beta()` sempre retorna `BETA_START=0.4`, anulando o annealing.
+
+**Correção aplicada**: Adicionada chamada a `agent.set_total_train_steps()` em `run_training()` após instanciar os agentes.
+
+---
+
+### N12 — MAPPO: epsilon dead code (sem efeito na exploração)
+
+**Severidade**: 🟡 MÉDIO — **✅ DOCUMENTADO**  
+**Arquivo**: `src/agents/mappo.py:51-58`
+
+**Descrição**: `MAPPOAgent.epsilon`, `get_epsilon()` e `decay_epsilon()` são computados mas **nunca usados** na seleção de ação (que usa `Categorical(probs).sample()` diretamente). `EPSILON_START`/`EPSILON_END`/`EPSILON_DECAY` no `MAPPOConfig` não impactam o comportamento.
+
+**Nota**: Isto não é um bug — PPO on-policy usa entropia da distribuição categórica para exploração. O epsilon-greedy seria incompatível com o IS ratio. Mantido para compatibilidade de interface e logging.
+
+---
+
+### N13 — HATRPO: epsilon dead code (mesmo problema do MAPPO)
+
+**Severidade**: 🟡 MÉDIO — **✅ DOCUMENTADO**  
+**Arquivo**: `src/agents/hatrpo.py:49-59`
+
+**Descrição**: Mesma situação do MAPPO: `epsilon` e `get_epsilon()` são computados mas ignorados por `select_action()`. A exploração vem da entropia da `Categorical`.
+
+---
+
+### N14 — `VALUE_LOSS_COEF` nunca usado no MAPPO
+
+**Severidade**: 🟡 MÉDIO — 🔴 PENDENTE  
+**Arquivo**: `src/config.py:165`, `src/agents/mappo.py:159`
+
+**Descrição**: `MAPPOConfig.VALUE_LOSS_COEF = 0.5` está definido no config, mas a loss do crítico é `F.mse_loss(batch_values, batch_returns)` sem multiplicação pelo coeficiente.
+
+**Correção esperada**: Multiplicar `critic_loss` por `self.config.VALUE_LOSS_COEF`.
+
+---
+
+### N15 — `LEARNING_STARTS` ignorado em MAPPO, HATRPO e QMIX
+
+**Severidade**: 🟢 BAIXO — 🔴 PENDENTE  
+**Arquivos**: `src/config.py:173-174, 187`
+
+**Descrição**: `MAPPOConfig.LEARNING_STARTS = 1000` e `HATRPOConfig.LEARNING_STARTS = 1000` estão definidos mas nunca verificados — `update()`/`update_actor()` são chamados desde o primeiro episódio. `QMIXTrainer.optimize()` também não verifica `steps_done` ou `learning_starts`.
+
+**Correção esperada**: Adicionar verificação nos respectivos métodos `update()`/`optimize()` ou remover dos configs.
+
+---
+
+### N16 — QMIXTrainer não verifica `LEARNING_STARTS`
+
+**Severidade**: 🟡 MÉDIO — 🔴 PENDENTE  
+**Arquivo**: `src/agents/qmix.py:117`
+
+**Descrição**: O `QMIXTrainer.optimize()` verifica apenas `len(memory) < BATCH_SIZE`. Diferente do IDQN/VDN, não há guard de `LEARNING_STARTS`. Se o buffer encher rápido, o treino começa antes de coleta significativa.
+
+**Correção esperada**: Adicionar guard `steps_done < LEARNING_STARTS`, compartilhando o contador dos `QMIXAgent`.
+
+---
+
+### N17 — VDN `_get_beta` superestima denominador do annealing
+
+**Severidade**: 🟡 MÉDIO — 🔴 PENDENTE  
+**Arquivo**: `src/agents/vdn.py:67-73`
+
+**Descrição**: `_get_beta()` calcula fração como `steps_done / (EPISODES_TOTAL * MAX_STEPS)`. Isso pressupõe que todo episódio dura `MAX_STEPS` passos. Episódios bem-sucedidos terminam mais cedo, então o denominador é superestimado e o annealing do beta fica mais lento que o ideal.
+
+**Correção esperada**: Usar `steps_done` real em vez de `EPISODES_TOTAL * MAX_STEPS`, ou rastrear steps reais.
+
+---
+
+### N18 — `distance_traveled` nunca plotado
+
+**Severidade**: 🟢 BAIXO — 🔴 PENDENTE  
+**Arquivo**: `src/evaluation.py`
+
+**Descrição**: `distance_traveled` é coletado e consolidado nas métricas, mas `plot_consolidated_results()` não inclui um subplot para esta métrica.
+
+**Correção esperada**: Substituir o painel de resumo (subplot 6) por um gráfico de distância percorrida.
+
+---
+
+## 📊 Matriz de Bugs por Algoritmo (Atualizada)
+
+| Bug                                 | IDQN   | Random | VDN    | QMIX   | MAPPO  | HATRPO |
+| ----------------------------------- | ------ | ------ | ------ | ------ | ------ | ------ |
+| B1 (\_pickup_box)                   | ✅     | ✅     | ✅     | ✅     | ✅     | ✅     |
+| B2 (\_robot_carrying init)          | ✅     | ✅     | ✅     | ✅     | ✅     | ✅     |
+| B3 (PER alpha)                      | ✅     | N/A    | ✅     | ✅     | N/A    | N/A    |
+| B4 (epsilon-greedy on-policy)       | N/A    | N/A    | N/A    | N/A    | ✅     | ✅     |
+| **B5 (\_should_optimize bloqueia)** | **✅** | **✅** | N/A    | N/A    | N/A    | N/A    |
+| **B6 (dropout ativo inferência)**   | **✅** | N/A    | **✅** | **✅** | ✅ OK  | **✅** |
+| **B7 (HATRPO trust-region)**        | N/A    | N/A    | N/A    | N/A    | N/A    | **✅** |
+| C4 (update_priorities alpha)        | ✅     | N/A    | N/A    | ✅     | N/A    | N/A    |
+| C5 (\_max_priority double-alpha)    | N/A    | N/A    | ✅     | N/A    | N/A    | N/A    |
+| I1 (residual critic)                | N/A    | N/A    | N/A    | N/A    | N/A    | ✅     |
+| I2 (squeeze batch=1)                | ✅     | N/A    | N/A    | N/A    | N/A    | N/A    |
+| I3 (variable rebind mappo)          | N/A    | N/A    | N/A    | N/A    | ✅     | N/A    |
+| I5 (distance_traveled)              | ✅     | ✅     | N/A    | N/A    | N/A    | N/A    |
+| I6 (checkpoint filename)            | ✅     | ✅     | N/A    | N/A    | N/A    | N/A    |
+| I7 (IDQN dropout inferência)        | ✅     | N/A    | N/A    | N/A    | N/A    | N/A    |
+| I8 (select_action threads)          | ✅     | ✅     | N/A    | N/A    | N/A    | N/A    |
+| N1 (CLIP_EPS hardcoded)             | N/A    | N/A    | N/A    | N/A    | N/A    | ✅     |
+| N2 (TAU hardcoded)                  | N/A    | N/A    | N/A    | N/A    | N/A    | ✅     |
+| N8 (_foreach_lerp_)                 | ✅     | N/A    | ✅     | ✅     | N/A    | ✅     |
+| **N9 (pool shutdown)**              | **✅** | **✅** | N/A    | N/A    | N/A    | N/A    |
+| **N10 (bg_pool não aguardado)**     | **✅** | **✅** | **✅** | **✅** | **✅** | **✅** |
+| **N11 (beta annealing quebrado)**   | **✅** | N/A    | N/A    | N/A    | N/A    | N/A    |
+| N12/N13 (epsilon dead code)         | N/A    | N/A    | N/A    | N/A    | 📝     | 📝     |
+| N14 (value_loss_coef)               | N/A    | N/A    | N/A    | N/A    | 🔴     | N/A    |
+| N15 (learning_starts ignorado)      | ✅     | N/A    | ✅     | 🔴     | 🔴     | 🔴     |
+| N16 (QMIX sem learning_starts)      | N/A    | N/A    | N/A    | 🔴     | N/A    | N/A    |
+| N17 (VDN beta annealing lento)      | N/A    | N/A    | 🔴     | N/A    | N/A    | N/A    |
+| N18 (distance_traveled não plotado) | 🔴     | 🔴     | 🔴     | 🔴     | 🔴     | 🔴     |
+
+**Legenda**: ✅ = corrigido / 📝 = documentado, sem correção (intencional) / 🔴 = pendente / N/A = não se aplica
+
+---
+
 ## 💡 Oportunidade de Unificação: `BaseAgent` e `BaseRunner`
 
 A arquitetura ideal a longo prazo seria:
