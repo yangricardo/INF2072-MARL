@@ -208,7 +208,9 @@ class WarehouseEnv(gym.Env):
                 self.grid[robot_pos[0]][robot_pos[1]] = f"R{robot_id + 1}"
                 return 25.0
 
-        return -2.0
+        # Drop fora do alvo: penalidade leve (era -2.0, que tornava a ação de entrega
+        # "tóxica" e enviesava Q(drop) negativo, sufocando o aprendizado da entrega).
+        return -0.1
 
     def _calculate_shaped_reward(self, robot_id, base_reward):
         reward = base_reward
@@ -230,19 +232,22 @@ class WarehouseEnv(gym.Env):
             # Se o robô NÃO está carregando, o objetivo dele é a caixa "A" mais próxima do chão
             current_distance = self._min_distance_to_boxes(robot_id)
 
-        # 2. Proteção de Transição: Se a ação do passo foi um Pick ou Drop de sucesso,
-        # apenas atualizamos o histórico de distância sem aplicar diferenciais (evita distorções)
-        if base_reward in [2.0, 25.0, -2.0]:
+        # 2. Proteção de Transição: num pickup/entrega bem-sucedido o objetivo muda
+        # (caixa↔alvo) e a distância dá um salto descontínuo — só atualizamos o histórico,
+        # sem aplicar o diferencial de potencial naquele passo.
+        if base_reward in (2.0, 25.0):
             self.previous_distances[robot_id] = current_distance
             return reward
 
         previous_distance = self.previous_distances[robot_id]
 
-        # 3. Computa o ganho ou perda de proximidade em relação ao objetivo atual legítimo
-        if current_distance < previous_distance:
-            reward += 0.1 * (previous_distance - current_distance)
-        elif current_distance > previous_distance:
-            reward -= 0.02 * (current_distance - previous_distance)
+        # 3. Shaping POTENTIAL-BASED (Ng et al. 1999): com potencial Φ(s) = −dist_objetivo,
+        # F = γ·Φ(s') − Φ(s) = previous_distance − γ·current_distance. Telescopa ao longo do
+        # episódio (não altera a política ótima) e elimina o ciclo de "farming" do shaping
+        # assimétrico anterior (+0.1 ao aproximar vs −0.02 ao afastar rendia ganho líquido oscilando).
+        SHAPING_SCALE = 0.1
+        gamma = getattr(self.config, "GAMMA", 0.99)
+        reward += SHAPING_SCALE * (previous_distance - gamma * current_distance)
 
         self.previous_distances[robot_id] = current_distance
         return reward
