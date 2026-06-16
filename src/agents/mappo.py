@@ -21,7 +21,7 @@ import torch.optim as optim
 from torch.distributions import Categorical
 from tqdm import tqdm
 
-from ..config import MAPPOConfig
+from ..config import DEVICE, MAPPOConfig
 from ..environment import WarehouseEnv
 from ..evaluation import plot_consolidated_results, record_policy_video
 from ..networks import ActorNetwork, CriticNetwork
@@ -33,7 +33,7 @@ class MAPPOAgent:
         self.action_dim = action_dim
         self.config = config
         self.global_state_dim = global_state_dim
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = DEVICE
 
         self.actor = ActorNetwork(state_dim, action_dim).to(self.device)
         self.critic = CriticNetwork(global_state_dim).to(self.device)
