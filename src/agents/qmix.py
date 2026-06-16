@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.optim as optim
+from tqdm import tqdm
 
 from ..config import QMIXConfig
 from ..environment import WarehouseEnv
@@ -215,7 +216,7 @@ def run(config=None, num_sessions=1, record_video=True):
         "collisions": [],
     }
 
-    for ep in range(total_episodes):
+    for ep in tqdm(range(total_episodes), desc="QMIX"):
         obs, info = env.reset()
         global_state = env._get_global_state()
         ep_reward = 0.0
