@@ -65,8 +65,11 @@ class QMIXAgent:
         if training and np.random.random() < self.get_epsilon():
             return np.random.randint(self.action_dim)
         with torch.no_grad():
+            self.policy_net.eval()
             state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
             q_values = self.policy_net(state_tensor)
+            if training:
+                self.policy_net.train()
             return int(q_values.argmax().item())
 
     def get_q_values(self, states):
