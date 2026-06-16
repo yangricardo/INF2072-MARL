@@ -1,0 +1,11 @@
+{
+  "python.pythonPath": "${workspaceFolder}/.venv/bin/python",
+  "python-envs.venvPath": "${workspaceFolder}/.venv",
+  "python-envs.venvFolders": [".venv"],
+  "python-envs.autoActivate": true,
+  "python-envs.autoActivateMode": "onEnter",
+  "python-envs.autoActivateEnvInTerminal": true,
+  "python-envs.autoActivateEnvInInteractiveWindow": true,
+  "python-envs.autoActivateEnvInNotebook": true,
+  "python-envs.autoActivateEnvInDebugConsole": true
+}
