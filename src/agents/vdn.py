@@ -16,6 +16,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from tqdm import tqdm
 
 from ..config import VDNConfig
 from ..environment import WarehouseEnv
@@ -197,7 +198,7 @@ def run(config=None, num_sessions=1, record_video=True):
         "collisions": [],
     }
 
-    for ep in range(total_episodes):
+    for ep in tqdm(range(total_episodes), desc="VDN"):
         obs, info = env.reset()
         ep_reward = 0.0
         step = 0
