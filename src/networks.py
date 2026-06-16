@@ -111,13 +111,14 @@ class QMixer(nn.Module):
     def forward(self, agent_qs, states):
         batch_size = agent_qs.size(0)
 
-        w1 = self.hyper_w1(states).view(batch_size, self.hidden_dim, self.n_agents)
+        # Ensure non-negativity of weights (monotonicity constraint for QMIX)
+        w1 = torch.abs(self.hyper_w1(states)).view(batch_size, self.hidden_dim, self.n_agents)
         b1 = self.hyper_b1(states).view(batch_size, self.hidden_dim, 1)
 
         hidden = torch.bmm(w1, agent_qs.unsqueeze(2)) + b1
         hidden = torch.relu(hidden)
 
-        w2 = self.hyper_w2(states).view(batch_size, 1, self.hidden_dim)
+        w2 = torch.abs(self.hyper_w2(states)).view(batch_size, 1, self.hidden_dim)
         b2 = self.hyper_b2(states).view(batch_size, 1, 1)
 
         q_total = torch.bmm(w2, hidden) + b2
