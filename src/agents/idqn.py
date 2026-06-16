@@ -116,11 +116,11 @@ class IDQNAgent:
         with torch.no_grad():
             next_actions = self.policy_net(next_states).argmax(1, keepdim=True)
             next_q_values = (
-                self.target_net(next_states).gather(1, next_actions).squeeze()
+                self.target_net(next_states).gather(1, next_actions).squeeze(1)
             )
             target_q = rewards + self.config.GAMMA * next_q_values * (1 - dones)
 
-        current_q = self.policy_net(states).gather(1, actions.unsqueeze(1)).squeeze()
+        current_q = self.policy_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
         td_errors = target_q - current_q
 
