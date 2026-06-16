@@ -345,21 +345,29 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 
 **Como funciona:**
 
-- `MAPPOAgent` contém `ActorNetwork` (entrada: obs local de 24-dim) e `CriticNetwork` (entrada: estado global de 22-dim), com otimizadores Adam separados.
+- `MAPPOAgent` contém `ActorNetwork` (entrada: obs local 24-dim) e `CriticNetwork` (entrada: estado global 22-dim), com otimizadores Adam separados.
 - **Coleta:** por episódio, armazena estados locais, ações, log-probs, recompensas e estados globais.
-- **Atualização pós-episódio por agente:**
-  1. Computa V(s) com o crítico.
-  2. **GAE** (_Generalized Advantage Estimation_, Schulman et al. 2016):
-     $$\hat{A}_t^{\text{GAE}(\gamma,\lambda)} = \sum_{l=0}^{T-t-1}(\gamma\lambda)^l\,\delta_{t+l}, \quad \delta_t = r_t + \gamma V(s_{t+1})(1-d_t) - V(s_t)$$
-     $$\hat{R}_t = \hat{A}_t + V(s_t) \quad \text{(Returns)}$$
-     Normalização: $\hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}$
+- **Atualização pós-episódio:**
+  1. Computa V(s) com o crítico centralizado.
+  2. **GAE** (Generalized Advantage Estimation, Schulman et al. 2016):
+     ```
+     δ_t = r_t + γ·V(s_{t+1})·(1-done_t) - V(s_t)
+     Â_t = Σ_{l≥0} (γ·λ)^l · δ_{t+l}
+     R_t = Â_t + V(s_t)  (Monte-Carlo returns)
+     Â ← (Â - mean(Â)) / (std(Â) + ε)  (normalização)
+     ```
   3. **PPO_EPOCHS=10** repetições com mini-batches de 32:
-     $$r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)} = \exp(\log\pi_{\text{new}} - \log\pi_{\text{old}})$$
-     $$\mathcal{L}^{\text{CLIP}}(\theta) = \mathbb{E}_t\!\left[\min\!\left(r_t(\theta)\hat{A}_t,\; \text{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\,\hat{A}_t\right)\right]$$
-     $$\mathcal{L}(\theta) = \mathcal{L}^{\text{CLIP}} - c_H\,H[\pi_\theta], \quad H[\pi] = -\sum_{a} \pi(a|s)\log\pi(a|s)$$
-     $$\mathcal{L}_V = \mathbb{E}[(V(s) - \hat{R}_t)^2]$$
+     ```
+     r_t(θ) = π_θ(a_t|s_t) / π_θ_old(a_t|s_t)  (probability ratio)
+     
+     L^CLIP(θ) = E_t[ min(r_t·Â_t, clip(r_t, 1-ε, 1+ε)·Â_t) ]
+     H[π] = -Σ_a π(a|s)·log π(a|s)  (entropy)
+     L_actor = -L^CLIP - c_H·H[π]
+     
+     L_critic = E[(V(s) - R_t)²]
+     ```
   4. Clip de gradiente em 0,5 para ator e crítico.
-- Decaimento multiplicativo de epsilon: $\varepsilon \leftarrow \varepsilon \times 0.995$ por episódio.
+- Decaimento multiplicativo de epsilon: ε ← ε × 0.995 por episódio.
 
 **Hiperparâmetros principais:**
 
@@ -390,16 +398,26 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - `CentralizedCriticOptimized`: `ImprovedCriticNetwork` (residual) com soft update (τ=0,005) da target; responsável pelo GAE.
 - `TrajectoryBuffer`: acumula a trajetória completa do episódio com estados achatados de ambos os agentes.
 - **Atualização pós-episódio:**
-  1. **Crítico:** $\mathcal{L}_V = \mathbb{E}[(V(s) - \hat{R}_t)^2]$ + soft update da target:
-     $$\theta_{\text{target}} \leftarrow (1-\tau)\,\theta_{\text{target}} + \tau\,\theta$$
+  1. **Crítico:** MSE loss + soft update da target:
+     ```
+     L_critic = E[(V(s) - R_t)²]
+     θ_target ← (1-τ)·θ_target + τ·θ
+     ```
+     
   2. **Por agente (sequencial — HATRPO original de Kuba et al. 2021):**
-     $$\pi_i^{k+1} = \arg\max_{\pi_i} \mathbb{E}\!\left[A_i^{\boldsymbol{\mu}^k}(s,\mathbf{a})\right] \;\text{s.t.}\; \mathbb{E}_s\!\left[D_{\text{KL}}\!\left(\pi_i^k(\cdot|s)\,\|\,\pi_i(\cdot|s)\right)\right] \leq \delta$$
      
-     _Implementação: usa PPO clip como aproximação ao trust-region KL:_
-     $$r_t(\theta_i) = \frac{\pi_{\theta_i}(a|s)}{\pi_{\theta_i^{\text{old}}}(a|s)}, \quad \text{clip em } [1-\epsilon, 1+\epsilon]$$
-     $$\mathcal{L}(\theta_i) = \mathbb{E}\!\left[\min\!\left(r_t\hat{A},\,\text{clip}(r_t,1-\epsilon,1+\epsilon)\hat{A}\right)\right] - c_H\,H[\pi_i]$$
+     _Formulação teórica:_ restrição de região de confiança via KL-divergence
+     ```
+     max E[A_i(s, a)]  s.t.  E_s[KL(π_old || π_new)] ≤ δ
+     ```
      
-     com ε=0,2 (equivalente a $\text{MAX\_KL} \approx 0,02$).
+     _Implementação prática:_ PPO clip como aproximação ao trust-region:
+     ```
+     r_t(θ) = π_θ(a|s) / π_θ_old(a|s)  (probability ratio)
+     clip em [1-ε, 1+ε] onde ε=0,2 ≈ MAX_KL=0,02
+     
+     L_actor = -E[ min(r·Â, clip(r,1-ε,1+ε)·Â) ] - c_H·H[π]
+     ```
      - A cada `TARGET_UPDATE_FREQ=100` passos: `actor_old.load_state_dict(actor.state_dict())`
 
 **Hiperparâmetros principais:**
