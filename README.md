@@ -308,28 +308,23 @@ y = \sum_{i=1}^{2} r_i + \gamma \sum_{i=1}^{2} \max_{a'_i} Q_i^{-}(o'_i, a'_i) \
 - O `QMixer` recebe Q-values individuais e o estado global; hiper-redes geram pesos W1, W2 ≥ 0 (via `abs()`) garantindo monotonicidade.
 - `QMIXPrioritizedReplayBuffer` armazena transições enriquecidas com estados globais: `(s, [a₁,a₂], [r₁,r₂], s', done, global_s, next_global_s)`.
   
-- **Rede de mistura QMIX** (Rashid et al. 2018) com monotonicidade garantida:
+**Rede de mistura QMIX** (Rashid et al. 2018) com monotonicidade garantida — pesos W₁, w₂ ≥ 0 (via `abs()`) das hiper-redes garantem:
 
 ```math
 Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(\mathbf{W}_1(s)\,\mathbf{q} + \mathbf{b}_1(s)\right) + b_2(s)
 ```
 
-  onde $\mathbf{W}_1(s) \geq 0$ e $\mathbf{w}_2(s) \geq 0$ (via `abs()`), garantindo a condição de monotonicidade:
-
 ```math
 \frac{\partial Q_{\text{tot}}}{\partial Q_i} \geq 0 \quad \forall\, i
 ```
 
-- **`QMIXTrainer.optimize()`:**
-  1. Computa Q-values correntes e targets via mixer e target-mixer.
-  2. Loss do mixer (MSE com pesos PER):
+**`QMIXTrainer.optimize()`:** computa Q-values correntes e targets via mixer/target-mixer, aplica loss MSE com pesos PER:
 
 ```math
 \mathcal{L}_{\text{mixer}} = \mathbb{E}\!\left[w \cdot \bigl(y - Q_{\text{tot}}^\theta\bigr)^2\right], \qquad y = \sum_i r_i + \gamma\, Q_{\text{tot}}^{-} \cdot (1-d)
 ```
 
-  3. Por agente: loss contrafactual (similar ao COMA) usando $(y - Q_{\text{tot}})^{\text{detach}} \cdot Q_i$.
-  4. Soft update das target nets individuais e do target mixer com τ=0,001.
+Por agente: loss contrafactual (similar ao COMA) usando $(y - Q_{\text{tot}})^{\text{detach}} \cdot Q_i$. Soft update das target nets com τ=0,001.
 
 **Hiperparâmetros principais:**
 
@@ -357,9 +352,11 @@ Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(
 
 - `MAPPOAgent` contém `ActorNetwork` (entrada: obs local 24-dim) e `CriticNetwork` (entrada: estado global 22-dim), com otimizadores Adam separados.
 - **Coleta:** por episódio, armazena estados locais, ações, log-probs, recompensas e estados globais.
-- **Atualização pós-episódio:**
-  1. Computa $V(s)$ com o crítico centralizado.
-  2. **GAE** (Generalized Advantage Estimation, Schulman et al. 2016):
+**Atualização pós-episódio:**
+
+**1.** Computa V(s) com o crítico centralizado.
+
+**2. GAE** (Generalized Advantage Estimation, Schulman et al. 2016):
 
 ```math
 \delta_t = r_t + \gamma V(s_{t+1})(1-d_t) - V(s_t), \qquad \hat{A}_t = \sum_{l=0}^{\infty}(\gamma\lambda)^l\,\delta_{t+l}
@@ -369,7 +366,7 @@ Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(
 \hat{R}_t = \hat{A}_t + V(s_t), \qquad \hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}
 ```
 
-  3. **PPO_EPOCHS=10** repetições com mini-batches de 32:
+**3. PPO_EPOCHS=10** repetições com mini-batches de 32:
 
 ```math
 r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}
@@ -387,8 +384,7 @@ r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid
 \mathcal{L}_{\text{critic}} = \mathbb{E}\!\left[\bigl(V(s) - \hat{R}_t\bigr)^2\right]
 ```
 
-  4. Clip de gradiente em 0,5 para ator e crítico.
-- Decaimento multiplicativo de epsilon: $\varepsilon \leftarrow \varepsilon \times 0.995$ por episódio.
+**4.** Clip de gradiente em 0,5 para ator e crítico. Decaimento multiplicativo de epsilon: $\varepsilon \leftarrow \varepsilon \times 0.995$ por episódio.
 
 **Hiperparâmetros principais:**
 
@@ -418,8 +414,9 @@ r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid
 - `HATRPOAgentOptimized`: `ImprovedActorNetwork` (residual) + rede-alvo `actor_old` para monitorar divergência de política.
 - `CentralizedCriticOptimized`: `ImprovedCriticNetwork` (residual) com soft update (τ=0,005) da target; responsável pelo GAE.
 - `TrajectoryBuffer`: acumula a trajetória completa do episódio com estados achatados de ambos os agentes.
-- **Atualização pós-episódio:**
-  1. **Crítico:** MSE loss + Polyak soft update:
+**Atualização pós-episódio:**
+
+**1. Crítico** — MSE loss + Polyak soft update:
 
 ```math
 \mathcal{L}_{\text{critic}} = \mathbb{E}\!\left[\bigl(V(s) - \hat{R}_t\bigr)^2\right]
@@ -429,15 +426,15 @@ r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid
 \theta_{\text{target}} \leftarrow (1-\tau)\,\theta_{\text{target}} + \tau\,\theta
 ```
 
-  2. **Por agente** (sequencial — HATRPO original de Kuba et al. 2021):
+**2. Por agente** (sequencial — HATRPO original de Kuba et al. 2021):
 
-     _Formulação teórica_ — restrição de região de confiança via KL-divergence:
+_Formulação teórica_ — restrição de região de confiança via KL-divergence:
 
 ```math
 \max_{\pi_i}\;\mathbb{E}\!\left[A_i(s,\mathbf{a})\right] \quad\text{s.t.}\quad \mathbb{E}_s\!\left[D_{\mathrm{KL}}\!\left(\pi_i^{\text{old}}(\cdot|s)\,\|\,\pi_i(\cdot|s)\right)\right] \leq \delta
 ```
 
-     _Implementação prática_ — PPO clip como aproximação ao trust-region (ε=0,2 ≈ MAX_KL=0,02):
+_Implementação prática_ — PPO clip como aproximação ao trust-region (ε=0,2 ≈ MAX_KL=0,02):
 
 ```math
 r_t(\theta_i) = \frac{\pi_{\theta_i}(a \mid s)}{\pi_{\theta_i^{\text{old}}}(a \mid s)}
@@ -447,7 +444,7 @@ r_t(\theta_i) = \frac{\pi_{\theta_i}(a \mid s)}{\pi_{\theta_i^{\text{old}}}(a \m
 \mathcal{L}_{\text{actor}} = -\mathbb{E}_t\!\left[\min\!\left(r_t\,\hat{A}_t,\;\operatorname{clip}(r_t,1-\varepsilon,1+\varepsilon)\,\hat{A}_t\right)\right] - c_H\,H[\pi]
 ```
 
-     - A cada `TARGET_UPDATE_FREQ=100` passos: `actor_old.load_state_dict(actor.state_dict())`
+A cada `TARGET_UPDATE_FREQ=100` passos: `actor_old.load_state_dict(actor.state_dict())`
 
 **Hiperparâmetros principais:**
 
