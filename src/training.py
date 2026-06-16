@@ -103,7 +103,7 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
                 try:
                     torch.save(
                         agent.policy_net.state_dict(),
-                        models_dir / f"best_agent_{i}_ep{episode}.pth",
+                        models_dir / f"best_agent_{i}_best.pth",
                     )
                 except Exception:
                     pass
@@ -237,6 +237,7 @@ def run_training(agent_class, config, num_sessions=1, record_video=True):
         "episode_steps": [],
         "success_rates": [],
         "collisions": [],
+        "distance_traveled": [],
     }
     for metrics in all_metrics:
         for key in consolidated_metrics:
