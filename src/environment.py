@@ -45,6 +45,7 @@ class WarehouseEnv(gym.Env):
         self.num_actions = NUM_ACTIONS
 
         self.delivered_boxes: list[bool] = []
+        self.robot_carrying: dict[int, int | None] = {}  # robot_id -> box_id (or None)
         self.steps = 0
         self.max_steps = self.config.MAX_STEPS
         self.total_deliveries = 0
@@ -108,6 +109,7 @@ class WarehouseEnv(gym.Env):
         # list comprehension para o pyright inferir o tipo-união (vira None após pickup)
         self.box_positions = [pos for pos in self._find_positions("A")]
         self.delivered_boxes = [False] * self.num_boxes
+        self.robot_carrying = {i: None for i in range(self.num_robots)}  # reset carrying status
 
         self.steps = 0
         self.total_deliveries = 0
@@ -186,18 +188,14 @@ class WarehouseEnv(gym.Env):
         for box_id, box_pos in enumerate(self.box_positions):
             if not self.delivered_boxes[box_id] and box_pos == robot_pos:
                 self.box_positions[box_id] = None
+                self.robot_carrying[robot_id] = box_id  # track which box this robot carries
                 self.grid[robot_pos[0]][robot_pos[1]] = f"R{robot_id + 1}"
                 return 2.0
         return -0.02
 
     def _drop_box(self, robot_id):
         robot_pos = self.robot_positions[robot_id]
-
-        box_with_robot = None
-        for box_id, box_pos in enumerate(self.box_positions):
-            if box_pos is None and not self.delivered_boxes[box_id]:
-                box_with_robot = box_id
-                break
+        box_with_robot = self.robot_carrying[robot_id]
 
         if box_with_robot is None:
             return -0.02
@@ -205,6 +203,7 @@ class WarehouseEnv(gym.Env):
         for target_pos in self.targets:
             if robot_pos == target_pos:
                 self.delivered_boxes[box_with_robot] = True
+                self.robot_carrying[robot_id] = None  # robot no longer carries this box
                 self.total_deliveries += 1
                 self.grid[robot_pos[0]][robot_pos[1]] = f"R{robot_id + 1}"
                 return 25.0
@@ -223,9 +222,6 @@ class WarehouseEnv(gym.Env):
             reward -= 0.02 * (current_distance - previous_distance)
 
         self.previous_distances[robot_id] = current_distance
-
-        if all(self.delivered_boxes):
-            reward += 50.0
 
         return reward
 
@@ -323,6 +319,12 @@ class WarehouseEnv(gym.Env):
             shaped_reward = self._calculate_shaped_reward(robot_id, base_reward)
             rewards[robot_id] = shaped_reward
             total_reward += shaped_reward
+
+        # Add terminal bonus once (not per robot) when all boxes delivered
+        if all(self.delivered_boxes):
+            total_reward += 50.0
+            for robot_id in range(self.num_robots):
+                rewards[robot_id] += 50.0 / self.num_robots  # distribute evenly
 
         terminated = all(self.delivered_boxes)
         truncated = self.steps >= self.max_steps
