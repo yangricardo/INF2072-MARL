@@ -312,7 +312,15 @@ class WarehouseEnv(gym.Env):
             self._obs_cache_step = self.steps
         one_hot = np.zeros(self.num_robots, dtype=np.float32)
         one_hot[robot_id] = 1.0
-        return np.concatenate([self._obs_cache, one_hot]).astype(np.float32)
+        
+        # INCLUSÃO CRÍTICA: Fornece o estado de inventário do próprio robô (0.0=Vazio, 1.0=Carregando)
+        carrying_flag = np.array(
+            [1.0 if self.robot_carrying[robot_id] is not None else 0.0], 
+            dtype=np.float32
+        )
+        
+        # O vetor expande para dimensão 43 automaticamente e a rede vai se readequar sozinha
+        return np.concatenate([self._obs_cache, one_hot, carrying_flag]).astype(np.float32)
 
     def step(self, actions):  # type: ignore[override]  # MARL: rewards é lista por agente
         self.steps += 1
