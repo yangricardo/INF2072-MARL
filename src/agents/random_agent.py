@@ -1,5 +1,7 @@
 """Baseline aleatório.
 
+Extraído de: Código/Executa Experimento Randomico.ipynb (classe RandomAgent).
+
 Escolhe ações uniformemente ao acaso e não aprende. Mantém a mesma interface do
 ``IDQNAgent`` (incluindo ``remember``/``optimize``/``*_checkpoint`` como no-ops)
 para ser usado diretamente no mesmo loop de treino em ``training.py``.
