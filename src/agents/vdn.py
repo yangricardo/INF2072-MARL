@@ -163,10 +163,14 @@ class VDNController:
         return loss_val
 
     def _soft_update(self):
-        tau = self.config.TAU
+        # Polyak averaging (soft update) — vetorizado via _foreach_lerp_
+        # para cada par (policy_net, target_net)
         for pnet, tnet in zip(self.policy_nets, self.target_nets):
-            for tp, pp in zip(tnet.parameters(), pnet.parameters()):
-                tp.data.copy_(tau * pp.data + (1 - tau) * tp.data)
+            torch._foreach_lerp_(
+                list(tnet.parameters()),
+                list(pnet.parameters()),
+                self.config.TAU,
+            )
 
     def _hard_update(self):
         for pnet, tnet in zip(self.policy_nets, self.target_nets):
