@@ -69,7 +69,7 @@ class IDQNConfig(BaseConfig):
 
     # 2. Aprendizado Ágil (Combate a não-estacionaridade de múltiplos agentes)
     LEARNING_RATE = 0.00005  # LR mais baixo estabiliza o treino quando um interfere no outro
-    BATCH_SIZE = 64          # Lotes menores focam em experiências temporalmente mais frescas
+    BATCH_SIZE = 128          # Lotes menores focam em experiências temporalmente mais frescas
     GAMMA = 0.95
     TAU = 0.001
     WEIGHT_DECAY = 1e-5
@@ -88,7 +88,7 @@ class IDQNConfig(BaseConfig):
     # 4. Treinamento Agressivo 
     MAX_GRAD_NORM = 1.0
     LEARNING_STARTS = 1000
-    TRAIN_FREQ = 1           # Otimiza a rede a cada 1 passo do ambiente (reação imediata)
+    TRAIN_FREQ = 8           # Treina a cada 4 passos para permitir que o replay buffer acumule experiências mais diversas
     USE_SOFT_UPDATE = True
 
     BASE_DIR = "resultados_warehouse_idqn"
