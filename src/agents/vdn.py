@@ -91,7 +91,7 @@ class VDNController:
         eps = self.get_epsilon() if training else 0.0
         actions = []
         with torch.no_grad():
-            obs_t = torch.FloatTensor(obs).unsqueeze(0).to(self.device)
+            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
             for net in self.policy_nets:
                 if training and np.random.random() < eps:
                     actions.append(np.random.randint(self.action_dim))
@@ -122,12 +122,12 @@ class VDNController:
             self.memory.sample(self.config.BATCH_SIZE, beta=beta)
         )
 
-        S = torch.FloatTensor(states).to(self.device)
-        A = torch.LongTensor(actions).to(self.device)
-        R = torch.FloatTensor(rewards).to(self.device)
-        S_ = torch.FloatTensor(next_states).to(self.device)
-        D = torch.FloatTensor(dones).to(self.device)
-        W = torch.FloatTensor(weights).to(self.device)
+        S = torch.as_tensor(states, dtype=torch.float32, device=self.device)
+        A = torch.as_tensor(actions, dtype=torch.long, device=self.device)
+        R = torch.as_tensor(rewards, dtype=torch.float32, device=self.device)
+        S_ = torch.as_tensor(next_states, dtype=torch.float32, device=self.device)
+        D = torch.as_tensor(dones, dtype=torch.float32, device=self.device)
+        W = torch.as_tensor(weights, dtype=torch.float32, device=self.device)
 
         # Q_total atual
         q_total = torch.zeros(self.config.BATCH_SIZE, device=self.device)
