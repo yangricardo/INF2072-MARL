@@ -1,7 +1,11 @@
 """Agente IDQN (Independent Deep Q-Network).
 
-Porta de ``OptimizedIDQNAgent`` da v1.3.0: Double-DQN com prioritized replay,
-soft update da target network e exploração epsilon-greedy decrescente.
+Extraído de: Código/Ambiente e Execução IDQN - Versão 1.3.0.py
+(classe OptimizedIDQNAgent). Double-DQN com prioritized replay, soft update da
+target network e exploração epsilon-greedy decrescente.
+
+O fallback sem priorização (``deque``) é mantido por fidelidade ao original, ainda
+que nenhuma config do projeto desative ``PRIORITIZED_REPLAY``.
 """
 
 import os
@@ -37,6 +41,7 @@ class IDQNAgent:
             weight_decay=config.WEIGHT_DECAY,
         )
 
+        self.memory: PrioritizedReplayBuffer | deque
         if config.PRIORITIZED_REPLAY:
             self.memory = PrioritizedReplayBuffer(config.BUFFER_SIZE, alpha=config.ALPHA)
         else:
@@ -69,9 +74,9 @@ class IDQNAgent:
 
     def remember(self, state, action, reward, next_state, done):
         if self.config.PRIORITIZED_REPLAY:
-            self.memory.push(state, action, reward, next_state, done)
+            self.memory.push(state, action, reward, next_state, done)  # type: ignore[union-attr]
         else:
-            self.memory.append((state, action, reward, next_state, done))
+            self.memory.append((state, action, reward, next_state, done))  # type: ignore[union-attr]
 
     def optimize(self):
         if (
@@ -85,6 +90,8 @@ class IDQNAgent:
         if self.learning_steps % self.config.TRAIN_FREQ != 0:
             return 0
 
+        weights = None
+        indices = None
         if self.config.PRIORITIZED_REPLAY:
             (
                 states,
@@ -94,12 +101,11 @@ class IDQNAgent:
                 dones,
                 indices,
                 weights,
-            ) = self.memory.sample(self.config.BATCH_SIZE)
+            ) = self.memory.sample(self.config.BATCH_SIZE)  # type: ignore[union-attr]
             weights = torch.FloatTensor(weights).to(self.device)
         else:
-            batch = random.sample(self.memory, self.config.BATCH_SIZE)
+            batch = random.sample(self.memory, self.config.BATCH_SIZE)  # type: ignore[arg-type]
             states, actions, rewards, next_states, dones = zip(*batch)
-            indices = None
 
         states = torch.FloatTensor(np.array(states)).to(self.device)
         actions = torch.LongTensor(np.array(actions)).to(self.device)
@@ -118,7 +124,7 @@ class IDQNAgent:
 
         td_errors = target_q - current_q
 
-        if self.config.PRIORITIZED_REPLAY:
+        if self.config.PRIORITIZED_REPLAY and weights is not None:
             loss = (weights * td_errors.pow(2)).mean()
         else:
             loss = td_errors.pow(2).mean()
@@ -132,7 +138,7 @@ class IDQNAgent:
 
         if self.config.PRIORITIZED_REPLAY and indices is not None:
             priorities = td_errors.abs().detach().cpu().numpy() + 1e-6
-            self.memory.update_priorities(indices, priorities)
+            self.memory.update_priorities(indices, priorities)  # type: ignore[union-attr]
 
         if self.config.USE_SOFT_UPDATE:
             self.soft_update_target()
