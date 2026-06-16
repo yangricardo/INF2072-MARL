@@ -91,7 +91,10 @@ class VDNController:
                 if training and np.random.random() < eps:
                     actions.append(np.random.randint(self.action_dim))
                 else:
+                    net.eval()
                     q = net(obs_t)
+                    if training:
+                        net.train()
                     actions.append(int(q.argmax(dim=1).item()))
         return actions
 
