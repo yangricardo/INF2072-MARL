@@ -20,6 +20,7 @@ env/
 resultados_*/
 *_results_*/
 animacao_*_frames/
+out/
 
 # Modelos e saídas
 Modelos/
