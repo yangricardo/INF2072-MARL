@@ -1,5 +1,8 @@
 """Avaliação (gravação de vídeo) e gráficos consolidados.
 
+Extraído de: Código/Ambiente e Execução IDQN - Versão 1.3.0.py
+(evaluate_and_record_video, plot_consolidated_results).
+
 A seleção de ações na avaliação usa ``agent.select_action(obs, training=False)``,
 funcionando de forma idêntica para IDQN (greedy, sem exploração) e para o
 baseline aleatório.
