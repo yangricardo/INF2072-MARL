@@ -110,6 +110,8 @@ class WarehouseEnv(gym.Env):
         self.box_positions = [pos for pos in self._find_positions("A")]
         self.delivered_boxes = [False] * self.num_boxes
         self.robot_carrying = {i: None for i in range(self.num_robots)}  # reset carrying status
+        # Cache de índices ativos para evitar O(n²) em _min_distance_to_boxes
+        self._active_box_indices = list(range(self.num_boxes))
 
         self.steps = 0
         self.total_deliveries = 0
@@ -128,21 +130,15 @@ class WarehouseEnv(gym.Env):
 
     def _min_distance_to_boxes(self, robot_id):
         robot_pos = self.robot_positions[robot_id]
-        remaining_boxes = [
-            box_pos
-            for box_pos in self.box_positions
-            if box_pos is not None
-            and not self.delivered_boxes[self.box_positions.index(box_pos)]
-        ]
-
-        if not remaining_boxes:
-            return 0
-        return min(
-            [
-                abs(robot_pos[0] - box_pos[0]) + abs(robot_pos[1] - box_pos[1])
-                for box_pos in remaining_boxes
-            ]
-        )
+        # Usa active_box_indices (cache de reset()) para evitar O(n²) com list.index()
+        min_dist = 100  # valor default equivalente ao max_steps
+        for box_id in self._active_box_indices:
+            box_pos = self.box_positions[box_id]
+            if box_pos is not None and not self.delivered_boxes[box_id]:
+                dist = abs(robot_pos[0] - box_pos[0]) + abs(robot_pos[1] - box_pos[1])
+                if dist < min_dist:
+                    min_dist = dist
+        return 0 if min_dist == 100 else min_dist
 
     def _is_valid_position(self, pos, robot_id=None):
         i, j = pos
@@ -251,9 +247,9 @@ class WarehouseEnv(gym.Env):
             min_box_dist = min(
                 [
                     abs(robot_pos[0] - box_pos[0]) + abs(robot_pos[1] - box_pos[1])
-                    for box_pos in self.box_positions
+                    for box_id, box_pos in enumerate(self.box_positions)
                     if box_pos is not None
-                    and not self.delivered_boxes[self.box_positions.index(box_pos)]
+                    and not self.delivered_boxes[box_id]
                 ],
                 default=100,
             )
@@ -301,8 +297,8 @@ class WarehouseEnv(gym.Env):
         if len(actions) != self.num_robots:
             actions = [actions] * self.num_robots
 
-        total_reward = 0
-        rewards = [0, 0]
+        total_reward = 0.0
+        rewards = [0.0, 0.0]
 
         movement_rewards = []
         for robot_id, action in enumerate(actions):
