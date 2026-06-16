@@ -17,6 +17,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.distributions import Categorical
 from tqdm import tqdm
 
 from ..config import MAPPOConfig
@@ -60,11 +61,10 @@ class MAPPOAgent:
         with torch.no_grad():
             state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
             probs, _ = self.actor(state_tensor)
-            if training and np.random.random() < self.epsilon:
-                action = np.random.randint(self.action_dim)
-            else:
-                action = int(probs.argmax().item())
-            log_prob = torch.log(probs[0, action] + 1e-10).item()
+            # On-policy: sample from stochastic policy via categorical distribution
+            dist = Categorical(probs)
+            action = dist.sample().item()
+            log_prob = dist.log_prob(torch.tensor(action, device=self.device)).item()
             return action, log_prob
 
     def store_transition(self, state, action, log_prob, reward, done, global_state):
@@ -84,6 +84,8 @@ class MAPPOAgent:
         self.global_states = []
 
     def compute_gae(self, rewards, values, dones):
+        # Generalized Advantage Estimation (GAE-λ): Â_t = Σ_{l≥0}(γλ)^l·δ_{t+l}
+        # δ_t = r_t + γV(s_{t+1})(1-done) - V(s_t)
         advantages = []
         gae = 0.0
         for t in reversed(range(len(rewards))):
@@ -110,8 +112,10 @@ class MAPPOAgent:
         with torch.no_grad():
             values = self.critic(global_states).squeeze(-1)
             advantages = self.compute_gae(rewards, values, dones)
+            # Returns R_t = Â_t + V(s_t)
             returns = advantages + values
 
+        # Advantage normalization (whitening): Â ← (Â - μ) / (σ + ε)
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         total_actor_loss = 0.0
@@ -133,17 +137,22 @@ class MAPPOAgent:
                     probs.gather(1, batch_actions.unsqueeze(1)).squeeze(1) + 1e-10
                 )
 
+                # PPO probability ratio: r_t(θ) = π_θ(a|s) / π_{θ_old}(a|s) = exp(log π_new - log π_old)
                 ratio = torch.exp(new_log_probs - batch_old_log_probs)
+                # PPO clip surrogate: L^CLIP = E[min(r·Â, clip(r,1-ε,1+ε)·Â)]
                 surr1 = ratio * batch_advantages
                 surr2 = torch.clamp(
                     ratio, 1 - self.config.CLIP_EPS, 1 + self.config.CLIP_EPS
                 ) * batch_advantages
                 actor_loss = -torch.min(surr1, surr2).mean()
 
+                # Entropy bonus: H[π] = -Σ_a π(a|s)·log π(a|s)
                 entropy = -(probs * torch.log(probs + 1e-10)).sum(dim=1).mean()
+                # Full objective: L = L^CLIP - c_H·H[π]
                 actor_loss = actor_loss - self.config.ENTROPY_COEF * entropy
 
                 batch_values = self.critic(batch_global_states).squeeze(-1)
+                # Critic MSE loss: L_V = E[(V(s) - R_t)²]
                 critic_loss = F.mse_loss(batch_values, batch_returns)
 
                 self.actor_optimizer.zero_grad()
