@@ -10,20 +10,20 @@ Análise completa do código em `src/` e subdiretórios, identificando bugs, inc
 
 ## ✅ Fase 1 — Correções de Bugs (2026-06-15)
 
-| ID | Arquivo | Status | Descrição |
-|---|---|---|---|
-| C1 | src/networks.py | ✅ CORRIGIDO | QMixer: adicionado `torch.abs()` aos pesos W1 e W2 para garantir monotonicidade |
-| C2 | src/environment.py | ✅ CORRIGIDO | `_drop_box`: adicionado dict `robot_carrying` para rastrear qual robô carrega qual caixa |
-| C3 | src/environment.py | ✅ CORRIGIDO | Bônus terminal +50: movido para fora de `_calculate_shaped_reward`, aplicado uma única vez por step |
-| C4 | src/replay_buffer.py | ✅ CORRIGIDO | `PrioritizedReplayBuffer` e `QMIXPrioritizedReplayBuffer`: adicionado `** self.alpha` em `update_priorities` |
-| C5 | src/replay_buffer.py | ✅ CORRIGIDO | `VDNPrioritizedReplayBuffer`: `_max_priority` armazenado como valor raw, alpha aplicado apenas no armazenamento |
-| I1 | src/networks.py | ✅ CORRIGIDO | `ImprovedCriticNetwork`: adicionada conexão residual no loop de camadas ocultas |
-| I2 | src/agents/idqn.py | ✅ CORRIGIDO | `squeeze()` → `squeeze(1)` em 2 linhas para evitar colapso com batch_size=1 |
-| I3 | src/agents/mappo.py | ✅ CORRIGIDO | Variável `values` rebind: renomeada para `batch_values` no loop de mini-batches |
-| I5 | src/training.py | ✅ CORRIGIDO | `distance_traveled` adicionado à `consolidated_metrics` |
-| I6 | src/training.py | ✅ CORRIGIDO | Checkpoint: nome alterado de `best_agent_{i}_ep{episode}.pth` para `best_agent_{i}_best.pth` |
-| N1 | src/config.py, src/agents/hatrpo.py | ✅ CORRIGIDO | `CLIP_EPS`: adicionado ao `HATRPOConfig` e usado em lugar do hardcoded `0.8, 1.2` |
-| N2 | src/config.py, src/agents/hatrpo.py | ✅ CORRIGIDO | `TAU`: adicionado ao `HATRPOConfig` e usado em lugar do hardcoded `0.005` |
+| ID  | Arquivo                             | Status       | Descrição                                                                                                       |
+| --- | ----------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------- |
+| C1  | src/networks.py                     | ✅ CORRIGIDO | QMixer: adicionado `torch.abs()` aos pesos W1 e W2 para garantir monotonicidade                                 |
+| C2  | src/environment.py                  | ✅ CORRIGIDO | `_drop_box`: adicionado dict `robot_carrying` para rastrear qual robô carrega qual caixa                        |
+| C3  | src/environment.py                  | ✅ CORRIGIDO | Bônus terminal +50: movido para fora de `_calculate_shaped_reward`, aplicado uma única vez por step             |
+| C4  | src/replay_buffer.py                | ✅ CORRIGIDO | `PrioritizedReplayBuffer` e `QMIXPrioritizedReplayBuffer`: adicionado `** self.alpha` em `update_priorities`    |
+| C5  | src/replay_buffer.py                | ✅ CORRIGIDO | `VDNPrioritizedReplayBuffer`: `_max_priority` armazenado como valor raw, alpha aplicado apenas no armazenamento |
+| I1  | src/networks.py                     | ✅ CORRIGIDO | `ImprovedCriticNetwork`: adicionada conexão residual no loop de camadas ocultas                                 |
+| I2  | src/agents/idqn.py                  | ✅ CORRIGIDO | `squeeze()` → `squeeze(1)` em 2 linhas para evitar colapso com batch_size=1                                     |
+| I3  | src/agents/mappo.py                 | ✅ CORRIGIDO | Variável `values` rebind: renomeada para `batch_values` no loop de mini-batches                                 |
+| I5  | src/training.py                     | ✅ CORRIGIDO | `distance_traveled` adicionado à `consolidated_metrics`                                                         |
+| I6  | src/training.py                     | ✅ CORRIGIDO | Checkpoint: nome alterado de `best_agent_{i}_ep{episode}.pth` para `best_agent_{i}_best.pth`                    |
+| N1  | src/config.py, src/agents/hatrpo.py | ✅ CORRIGIDO | `CLIP_EPS`: adicionado ao `HATRPOConfig` e usado em lugar do hardcoded `0.8, 1.2`                               |
+| N2  | src/config.py, src/agents/hatrpo.py | ✅ CORRIGIDO | `TAU`: adicionado ao `HATRPOConfig` e usado em lugar do hardcoded `0.005`                                       |
 
 ---
 
@@ -31,23 +31,23 @@ Análise completa do código em `src/` e subdiretórios, identificando bugs, inc
 
 ### Bugs Adicionais Corrigidos
 
-| ID | Arquivo | Status | Descrição |
-|---|---|---|---|
-| B1 | src/environment.py | ✅ CORRIGIDO | `_pickup_box()`: adicionado guard `if self.robot_carrying[robot_id] is not None: return -0.02` — impede robô de silenciosamente trocar de caixa e orphanar a anterior |
-| B2 | src/environment.py | ✅ CORRIGIDO | `robot_carrying` inicializado em `__init__` como `{i: None for i in range(self.num_robots)}` em vez de `{}` — elimina `KeyError` antes do primeiro `reset()` |
-| B3 | src/replay_buffer.py | ✅ CORRIGIDO | **Double-alpha**: `push()` agora armazena `max_priority ** alpha`; `sample()` não re-aplica alpha — corrige distribuição de amostragem em `PrioritizedReplayBuffer` e `QMIXPrioritizedReplayBuffer` |
-| B4 | src/agents/mappo.py, hatrpo.py | ✅ CORRIGIDO | **Epsilon-greedy em política on-policy**: substituído por `Categorical(probs).sample()` — `log_prob` agora corresponde à ação efetivamente tomada, corrigindo o IS ratio do PPO |
+| ID  | Arquivo                        | Status       | Descrição                                                                                                                                                                                           |
+| --- | ------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1  | src/environment.py             | ✅ CORRIGIDO | `_pickup_box()`: adicionado guard `if self.robot_carrying[robot_id] is not None: return -0.02` — impede robô de silenciosamente trocar de caixa e orphanar a anterior                               |
+| B2  | src/environment.py             | ✅ CORRIGIDO | `robot_carrying` inicializado em `__init__` como `{i: None for i in range(self.num_robots)}` em vez de `{}` — elimina `KeyError` antes do primeiro `reset()`                                        |
+| B3  | src/replay_buffer.py           | ✅ CORRIGIDO | **Double-alpha**: `push()` agora armazena `max_priority ** alpha`; `sample()` não re-aplica alpha — corrige distribuição de amostragem em `PrioritizedReplayBuffer` e `QMIXPrioritizedReplayBuffer` |
+| B4  | src/agents/mappo.py, hatrpo.py | ✅ CORRIGIDO | **Epsilon-greedy em política on-policy**: substituído por `Categorical(probs).sample()` — `log_prob` agora corresponde à ação efetivamente tomada, corrigindo o IS ratio do PPO                     |
 
 ### Comentários Matemáticos Adicionados
 
 Fórmulas inline adicionadas nos módulos com referência ao paper original:
 
-| Arquivo | Fórmulas documentadas |
-|---------|----------------------|
-| `src/agents/idqn.py` | ε-greedy decay, Double-DQN TD-target, PER loss `L = E[w·δ²]`, soft update Polyak |
-| `src/agents/mappo.py` | GAE `δ_t` e `Â_t`, normalização de vantagens, PPO ratio, L^CLIP, entropia, L_critic |
+| Arquivo                | Fórmulas documentadas                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `src/agents/idqn.py`   | ε-greedy decay, Double-DQN TD-target, PER loss `L = E[w·δ²]`, soft update Polyak                     |
+| `src/agents/mappo.py`  | GAE `δ_t` e `Â_t`, normalização de vantagens, PPO ratio, L^CLIP, entropia, L_critic                  |
 | `src/agents/hatrpo.py` | GAE (em `CentralizedCriticOptimized.compute_gae`), PPO ratio, entropia, L_critic, soft update Polyak |
-| `src/networks.py` | QMIX mixing `Q_tot = w2·ReLU(W1·q + b1) + b2` com monotonicidade `∂Q_tot/∂Q_i ≥ 0`, `π(a|s) = softmax(logits)`, bloco residual `x_{l+1} = x_l + f_l(x_l)` |
+| `src/networks.py`      | QMIX mixing `Q_tot = w2·ReLU(W1·q + b1) + b2` com monotonicidade `∂Q_tot/∂Q_i ≥ 0`, `π(a             | s) = softmax(logits)`, bloco residual `x\_{l+1} = x_l + f_l(x_l)` |
 
 ### Documentação README
 
@@ -66,65 +66,90 @@ Revisão de oportunidades de paralelismo no loop de treino. Todas as operações
 
 ### Otimizações Implementadas
 
-| ID | Arquivo | Mudança | Ganho esperado |
-|----|---------|---------|----------------|
-| O1 | `src/agents/qmix.py` | `select_action` de cada agente em paralelo via `ThreadPoolExecutor.map()` | ~1.3–1.8× por step |
-| O1 | `src/agents/mappo.py` | `select_action` de cada agente em paralelo | ~1.3–1.8× por step |
-| O1 | `src/agents/hatrpo.py` | `select_action` de cada agente em paralelo | ~1.3–1.8× por step |
-| O2 | `src/training.py` | `optimize()` de cada agente IDQN em paralelo (`ThreadPoolExecutor` + `wait()`) | ~1.5–2× no optimize loop |
-| O2 | `src/agents/mappo.py` | `update()` de cada agente (PPO epochs) em paralelo após coleta de trajetória | ~1.5–2× no update pós-episódio |
-| O2 | `src/agents/hatrpo.py` | `update_actor()` de cada agente em paralelo (após `critic.update()` sequencial) | ~1.5–2× no update pós-episódio |
-| O3 | `src/training.py` | Checkpoint e CSV em background thread (`_io_pool`) — não bloqueia o loop de episódio | Elimina ~50–200 ms a cada `SAVE_CHECKPOINT_EVERY` eps |
-| O4 | `src/evaluation.py` | `imageio.mimsave()` e `plt.savefig()` em pool de background compartilhado (`_bg_pool`) | Elimina ~500–2500 ms bloqueantes no final do treino |
-| O5 | `src/environment.py` | Cache de `_get_observation()` em `_get_observation_for_robot()` por número de step | Elimina 50% das chamadas a `_get_observation()` em MAPPO/HATRPO |
+| ID  | Arquivo                | Mudança                                                                                | Ganho esperado                                                  |
+| --- | ---------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| O1  | `src/agents/qmix.py`   | `select_action` de cada agente em paralelo via `ThreadPoolExecutor.map()`              | ~1.3–1.8× por step                                              |
+| O1  | `src/agents/mappo.py`  | `select_action` de cada agente em paralelo                                             | ~1.3–1.8× por step                                              |
+| O1  | `src/agents/hatrpo.py` | `select_action` de cada agente em paralelo                                             | ~1.3–1.8× por step                                              |
+| O2  | `src/training.py`      | `optimize()` de cada agente IDQN em paralelo (`ThreadPoolExecutor` + `wait()`)         | ~1.5–2× no optimize loop                                        |
+| O2  | `src/agents/mappo.py`  | `update()` de cada agente (PPO epochs) em paralelo após coleta de trajetória           | ~1.5–2× no update pós-episódio                                  |
+| O2  | `src/agents/hatrpo.py` | `update_actor()` de cada agente em paralelo (após `critic.update()` sequencial)        | ~1.5–2× no update pós-episódio                                  |
+| O3  | `src/training.py`      | Checkpoint e CSV em background thread (`_io_pool`) — não bloqueia o loop de episódio   | Elimina ~50–200 ms a cada `SAVE_CHECKPOINT_EVERY` eps           |
+| O4  | `src/evaluation.py`    | `imageio.mimsave()` e `plt.savefig()` em pool de background compartilhado (`_bg_pool`) | Elimina ~500–2500 ms bloqueantes no final do treino             |
+| O5  | `src/environment.py`   | Cache de `_get_observation()` em `_get_observation_for_robot()` por número de step     | Elimina 50% das chamadas a `_get_observation()` em MAPPO/HATRPO |
 
 ### O que foi intencionalmente não paralelizado
 
-| Item | Motivo |
-|------|--------|
-| `VDN.select_actions` — loop interno por rede | Mesma `obs_t`; batching direto é mais eficiente que threads |
+| Item                                                         | Motivo                                                                      |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `VDN.select_actions` — loop interno por rede                 | Mesma `obs_t`; batching direto é mais eficiente que threads                 |
 | `QMIXTrainer.optimize` — loops de Q-values (coleta + target) | Dependência de dados: `curr_qs` alimenta o mixer antes dos loops por agente |
-| `buffer.sample()` e `update_priorities()` | Buffer compartilhado entre threads sem lock → race condition |
-| `env.step()` | Estado global único e mutável |
-| Loop `target_param` do soft update | Custo < 0.1 ms; overhead de thread > ganho |
-| `critic.update()` no HATRPO | Deve preceder `update_actor()` (fornece as vantagens); mantido sequencial |
+| `buffer.sample()` e `update_priorities()`                    | Buffer compartilhado entre threads sem lock → race condition                |
+| `env.step()`                                                 | Estado global único e mutável                                               |
+| Loop `target_param` do soft update                           | Custo < 0.1 ms; overhead de thread > ganho                                  |
+| `critic.update()` no HATRPO                                  | Deve preceder `update_actor()` (fornece as vantagens); mantido sequencial   |
 
 ---
 
 ## Pendente (não crítico)
 
-| ID | Arquivo | Status | Descrição |
-|---|---|---|---|
-| I4 | src/agents/mappo.py, hatrpo.py | TODO | Usar retorno direto de `env.reset()` em vez de API privada |
-| D1 | src/utils.py (novo) | TODO | Extrair `compute_gae` para função reutilizável (duplicada em mappo.py e hatrpo.py) |
-| D2 | src/evaluation.py | TODO | Extrair consolidação de métricas para função reutilizável (duplicada em 4 runners) |
-| E1 | src/agents/mappo.py, hatrpo.py | TODO | Mudar `advantages.insert(0)` para `append` + `reverse` — O(n) em vez de O(n²) |
-| E2 | src/agents/qmix.py | TODO | Reutilizar `curr_qs` em vez de chamar `get_q_values` duas vezes no mesmo batch |
+| ID  | Arquivo                        | Status | Descrição                                                                          |
+| --- | ------------------------------ | ------ | ---------------------------------------------------------------------------------- |
+| I4  | src/agents/mappo.py, hatrpo.py | TODO   | Usar retorno direto de `env.reset()` em vez de API privada                         |
+| D1  | src/utils.py (novo)            | TODO   | Extrair `compute_gae` para função reutilizável (duplicada em mappo.py e hatrpo.py) |
+| D2  | src/evaluation.py              | TODO   | Extrair consolidação de métricas para função reutilizável (duplicada em 4 runners) |
+| E1  | src/agents/mappo.py, hatrpo.py | TODO   | Mudar `advantages.insert(0)` para `append` + `reverse` — O(n) em vez de O(n²)      |
+| E2  | src/agents/qmix.py             | TODO   | Reutilizar `curr_qs` em vez de chamar `get_q_values` duas vezes no mesmo batch     |
 
 ---
 
 ## 🔄 Desvios Teóricos vs Papers Originais (Fase 2)
 
-| Agente | Desvio | Severidade | Impacto |
-|--------|--------|-----------|---------|
-| IDQN (Mnih 2015) | Sem beta annealing em PER (VDN tem, IDQN não) | MÉDIO | Importância-sampling bias não corrigida ao final do treino |
-| IDQN | Sem fallback hard-update se `USE_SOFT_UPDATE=False` | BAIXO | Soft-update é apenas mecanismo; hard-update nunca acionado |
-| VDN (Sunehag 2017) | Usa observação global para todos os agentes (paper usa obs local) | MÉDIO | Viola decentralized execution —não é realmente descentralizável em tempo de teste |
-| VDN | Recompensas somadas (em vez de team reward único) | MÉDIO | Mistura credit assignment multi-agente; assume simetria de recompensas |
-| VDN | Double-DQN não é no paper, é enhancement | BAIXO | Enhancement não documentada |
-| QMIX (Rashid 2018) | **Separate per-agent optimizer step não no paper** | CRÍTICO | Treina mixer separado; depois agentes separados com loss `(target-curr).detach() * Q_i` → não é QMIX correto |
-| QMIX | Parâmetro non-sharing (paper usa single shared net) | MÉDIO | Multiplicação de parâmetros; convergência potencialmente mais lenta |
-| QMIX | Reward summing (como VDN) | MÉDIO | Idem |
-| QMIX | Dois-layer hypernetworks (paper usa single linear) | BAIXO | Enhancement, não desvio (improvement |
-| MAPPO (Yu 2022) | **Epsilon-greedy em ator estocástico** | CRÍTICO | Quebra on-policy assumption; IS ratio corrompida |
-| MAPPO | Sem value clipping (PPO padrão tem) | MÉDIO | Grandes saltos em V(s) podem desestabilizar |
-| MAPPO | Vantagens reutilizadas em múltiplos epochs sem recompute | BAIXO | Standard PPO, não é desvio; comentário seria útil |
-| MAPPO | Multiplicativo epsilon-decay vs linear em otros | BAIXO | Não documentado; fundamentação teórica ausente |
-| HATRPO (Kuba 2021) | **Implementado como HAPPO, não HATRPO** | CRÍTICO | Usa PPO clip, não KL trust-region com sequential updates |
-| HATRPO | Team reward para todos agentes (paper: per-agent) | MÉDIO | Mistura credit assignment |
-| HATRPO | `actor_old` atualizado frequently (não apenas per-iteration) | MÉDIO | Trust-region reference não é mantido corretamente |
-| HATRPO | Epsilon-greedy | CRÍTICO | Idem MAPPO |
-| HATRPO | Critic soft-update não no paper | BAIXO | Enhancement |
+| Agente             | Desvio                                                            | Severidade | Impacto                                                                                                      |
+| ------------------ | ----------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| IDQN (Mnih 2015)   | Sem beta annealing em PER (VDN tem, IDQN não)                     | MÉDIO      | Importância-sampling bias não corrigida ao final do treino                                                   |
+| IDQN               | Sem fallback hard-update se `USE_SOFT_UPDATE=False`               | BAIXO      | Soft-update é apenas mecanismo; hard-update nunca acionado                                                   |
+| VDN (Sunehag 2017) | Usa observação global para todos os agentes (paper usa obs local) | MÉDIO      | Viola decentralized execution —não é realmente descentralizável em tempo de teste                            |
+| VDN                | Recompensas somadas (em vez de team reward único)                 | MÉDIO      | Mistura credit assignment multi-agente; assume simetria de recompensas                                       |
+| VDN                | Double-DQN não é no paper, é enhancement                          | BAIXO      | Enhancement não documentada                                                                                  |
+| QMIX (Rashid 2018) | **Separate per-agent optimizer step não no paper**                | CRÍTICO    | Treina mixer separado; depois agentes separados com loss `(target-curr).detach() * Q_i` → não é QMIX correto |
+| QMIX               | Parâmetro non-sharing (paper usa single shared net)               | MÉDIO      | Multiplicação de parâmetros; convergência potencialmente mais lenta                                          |
+| QMIX               | Reward summing (como VDN)                                         | MÉDIO      | Idem                                                                                                         |
+| QMIX               | Dois-layer hypernetworks (paper usa single linear)                | BAIXO      | Enhancement, não desvio (improvement                                                                         |
+| MAPPO (Yu 2022)    | **Epsilon-greedy em ator estocástico**                            | CRÍTICO    | Quebra on-policy assumption; IS ratio corrompida                                                             |
+| MAPPO              | Sem value clipping (PPO padrão tem)                               | MÉDIO      | Grandes saltos em V(s) podem desestabilizar                                                                  |
+| MAPPO              | Vantagens reutilizadas em múltiplos epochs sem recompute          | BAIXO      | Standard PPO, não é desvio; comentário seria útil                                                            |
+| MAPPO              | Multiplicativo epsilon-decay vs linear em otros                   | BAIXO      | Não documentado; fundamentação teórica ausente                                                               |
+| HATRPO (Kuba 2021) | **Implementado como HAPPO, não HATRPO**                           | CRÍTICO    | Usa PPO clip, não KL trust-region com sequential updates                                                     |
+| HATRPO             | Team reward para todos agentes (paper: per-agent)                 | MÉDIO      | Mistura credit assignment                                                                                    |
+| HATRPO             | `actor_old` atualizado frequently (não apenas per-iteration)      | MÉDIO      | Trust-region reference não é mantido corretamente                                                            |
+| HATRPO             | Epsilon-greedy                                                    | CRÍTICO    | Idem MAPPO                                                                                                   |
+| HATRPO             | Critic soft-update não no paper                                   | BAIXO      | Enhancement                                                                                                  |
+
+---
+
+## ✅ Fase 4 — Otimizações de Performance IDQN (2026-06-16)
+
+Otimizações focadas exclusivamente no gargalo IDQN, que roda em CPU. Baseadas na análise que identificou o `ThreadPoolExecutor` criado por step e o `sample()` O(N) como os dois maiores custos.
+
+| ID  | Arquivo                | Mudança                                                                                                                        | Ganho esperado                                           |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| P1  | `src/training.py`      | `ThreadPoolExecutor` movido para fora do loop de steps — pool persistente `_optimize_pool` criado uma vez em `train_session()` | Elimina overhead de ~750k criações de pool (~1-5ms cada) |
+| P2  | `src/training.py`      | Submissão condicional via `_should_optimize()` — só submete se houver trabalho real                                            | Elimina scheduling desnecessário em ~87.5% dos steps     |
+| P3  | `src/replay_buffer.py` | Nova classe `SumTree` (Segment Tree) substitui `list` + `np.array()` + `np.random.choice()` — sample e update em O(log N)      | Reduz ~500k operações para ~19 por sample                |
+| P4  | `src/config.py`        | `IDQNConfig`: `BETA` fixo substituído por `BETA_START=0.4` e `BETA_END=1.0`                                                    | Corrige viés de IS weights ao final do treino            |
+| P5  | `src/replay_buffer.py` | `sample()` aceita `steps_done` para beta annealing                                                                             | Acompanha P4 na implementação                            |
+| P6  | `src/agents/idqn.py`   | `soft_update_target()` com `torch._foreach_lerp_()` vetorizado                                                                 | Reduz kernel launches no soft update                     |
+| P7  | `src/environment.py`   | `_min_distance_to_boxes()`: cache `_active_box_indices` elimina `list.index()` O(n²)                                           | Reduz ~64 operações para ~8 por chamada                  |
+| P8  | `src/environment.py`   | `_get_observation()`: `enumerate()` no lugar de `list.index()`                                                                 | Reduz ~64 operações para ~8 por chamada                  |
+
+### O que foi intencionalmente não incluído nesta fase
+
+| Item                                               | Motivo                                   |
+| -------------------------------------------------- | ---------------------------------------- |
+| Mudar algoritmo de IDQN para VDN/QMIX/MAPPO/HATRPO | Escopo é otimizar IDQN, não substituí-lo |
+| Non-stationarity por independência entre agentes   | Requer mudança de algoritmo              |
+| Inferência GPU→CPU para batch 1                    | Já roda em CPU; sem ganho adicional      |
 
 ---
 
@@ -161,6 +186,7 @@ w2 = torch.abs(self.hyper_w2(states)).view(batch_size, 1, self.hidden_dim)
 O modelo do código assume: "se `box_positions[box_id] is None` e `not delivered_boxes[box_id]`, então essa caixa está sendo carregada por algum robô." Porém não há registro de **qual robô** carrega qual caixa.
 
 Quando dois robôs fazem pickup de caixas diferentes no mesmo episódio:
+
 - Robô 0 pega caixa A → `box_positions[A] = None`
 - Robô 1 pega caixa B → `box_positions[B] = None`
 - Robô 1 chama `action_drop` → `_drop_box` retorna a **primeira** caixa com `box_pos is None`, que é a caixa A (do Robô 0)
@@ -226,6 +252,7 @@ self.priorities[idx] = abs(td_error) + 1e-6  # falta ** self.alpha
 ```
 
 Mas em `sample()`, `probs = priorities ** self.alpha` é aplicado. Resultado:
+
 - Transições **novas** (adicionadas em `push`): alpha aplicado uma vez via `self._max_priority ** self.alpha`
 - Transições **atualizadas** (em `update_priorities`): alpha **não** aplicado no armazenamento, apenas em `sample()`
 
@@ -601,28 +628,28 @@ VDN faz annealing de beta (correto para PER), mas IDQN e QMIX usam beta fixo. N�
 
 ## 📋 Sumário de Ações Recomendadas
 
-| Prioridade | ID | Arquivo(s) | Ação |
-|---|---|---|---|
-| CRÍTICO | C1 | networks.py | Adicionar `torch.abs()` em QMixer |
-| CRÍTICO | C2 | environment.py | Rastrear `robot_carrying` |
-| CRÍTICO | C3 | environment.py | Bônus terminal uma única vez |
-| CRÍTICO | C4 | replay_buffer.py | Alpha em `update_priorities` (2 classes) |
-| CRÍTICO | C5 | replay_buffer.py | `_max_priority` raw em VDN |
-| ALTO | I1 | networks.py | Residual em `ImprovedCriticNetwork` |
-| ALTO | I2 | idqn.py | `squeeze(1)` em 2 linhas |
-| ALTO | I3 | mappo.py | Renomear variável interna |
-| ALTO | I4 | mappo.py, hatrpo.py | Usar retorno de `env.reset()` |
-| ALTO | I5 | training.py | Incluir `distance_traveled` |
-| MÉDIO | I6 | training.py | Nome fixo para checkpoint |
-| MÉDIO | N1 | hatrpo.py, config.py | CLIP_EPS configurável |
-| MÉDIO | N2 | hatrpo.py, config.py | TAU configurável |
-| BAIXO | D1–D4 | múltiplos | Extrair código duplicado |
-| BAIXO | E1–E3 | mappo.py, hatrpo.py, qmix.py, env.py | Otimizações menores |
+| Prioridade | ID    | Arquivo(s)                           | Ação                                     |
+| ---------- | ----- | ------------------------------------ | ---------------------------------------- |
+| CRÍTICO    | C1    | networks.py                          | Adicionar `torch.abs()` em QMixer        |
+| CRÍTICO    | C2    | environment.py                       | Rastrear `robot_carrying`                |
+| CRÍTICO    | C3    | environment.py                       | Bônus terminal uma única vez             |
+| CRÍTICO    | C4    | replay_buffer.py                     | Alpha em `update_priorities` (2 classes) |
+| CRÍTICO    | C5    | replay_buffer.py                     | `_max_priority` raw em VDN               |
+| ALTO       | I1    | networks.py                          | Residual em `ImprovedCriticNetwork`      |
+| ALTO       | I2    | idqn.py                              | `squeeze(1)` em 2 linhas                 |
+| ALTO       | I3    | mappo.py                             | Renomear variável interna                |
+| ALTO       | I4    | mappo.py, hatrpo.py                  | Usar retorno de `env.reset()`            |
+| ALTO       | I5    | training.py                          | Incluir `distance_traveled`              |
+| MÉDIO      | I6    | training.py                          | Nome fixo para checkpoint                |
+| MÉDIO      | N1    | hatrpo.py, config.py                 | CLIP_EPS configurável                    |
+| MÉDIO      | N2    | hatrpo.py, config.py                 | TAU configurável                         |
+| BAIXO      | D1–D4 | múltiplos                            | Extrair código duplicado                 |
+| BAIXO      | E1–E3 | mappo.py, hatrpo.py, qmix.py, env.py | Otimizações menores                      |
 
 ---
 
 ## 📚 Referências
 
-- Rashid, T., et al. (2018). *QMIX: Monotonic Value Function Factorisation for Deep Multi-Agent Reinforcement Learning*. ICML 2018.
-- Sunehag, P., et al. (2017). *Value-Decomposition Networks For Cooperative Multi-Agent Learning*. AAMAS 2018.
-- Schulman, J., et al. (2017). *Proximal Policy Optimization Algorithms*. OpenAI Technical Report.
+- Rashid, T., et al. (2018). _QMIX: Monotonic Value Function Factorisation for Deep Multi-Agent Reinforcement Learning_. ICML 2018.
+- Sunehag, P., et al. (2017). _Value-Decomposition Networks For Cooperative Multi-Agent Learning_. AAMAS 2018.
+- Schulman, J., et al. (2017). _Proximal Policy Optimization Algorithms_. OpenAI Technical Report.
