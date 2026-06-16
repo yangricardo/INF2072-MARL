@@ -179,6 +179,7 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
 
     env.close()
     _io_pool.shutdown(wait=True)  # Flush pending checkpoint writes before returning
+    _optimize_pool.shutdown(wait=True)  # N9: Release optimize threads
 
     try:
         df = pd.DataFrame(
