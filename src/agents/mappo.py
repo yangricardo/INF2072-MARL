@@ -17,6 +17,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+from tqdm import tqdm
 
 from ..config import MAPPOConfig
 from ..environment import WarehouseEnv
@@ -201,7 +202,7 @@ def run(config=None, num_sessions=1, record_video=True):
         "collisions": [],
     }
 
-    for ep in range(total_episodes):
+    for ep in tqdm(range(total_episodes), desc="MAPPO"):
         env.reset()
         for agent in agents:
             agent.clear_memory()
