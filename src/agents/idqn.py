@@ -25,7 +25,7 @@ class IDQNAgent:
         self.agent_id = agent_id
         self.action_dim = action_dim
         self.config = config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cpu")
 
         self.policy_net = ImprovedDQN(
             state_dim, action_dim, config.HIDDEN_DIM, config.DROPOUT_RATE
@@ -43,7 +43,12 @@ class IDQNAgent:
 
         self.memory: PrioritizedReplayBuffer | deque
         if config.PRIORITIZED_REPLAY:
-            self.memory = PrioritizedReplayBuffer(config.BUFFER_SIZE, alpha=config.ALPHA)
+            self.memory = PrioritizedReplayBuffer(
+                config.BUFFER_SIZE,
+                alpha=config.ALPHA,
+                beta_start=config.BETA_START,
+                beta_end=config.BETA_END,
+            )
         else:
             self.memory = deque(maxlen=config.BUFFER_SIZE)
 
@@ -51,6 +56,13 @@ class IDQNAgent:
         self.learning_steps = 0
         self.total_episodes = 0
         self.losses = []
+        self._total_train_steps: int | None = None
+
+    def set_total_train_steps(self, total_steps: int):
+        """Define o total de steps de treino para o annealing do beta no PER."""
+        self._total_train_steps = total_steps
+        if self.config.PRIORITIZED_REPLAY and isinstance(self.memory, PrioritizedReplayBuffer):
+            self.memory.set_total_steps(total_steps)
 
     def get_epsilon(self):
         if self.steps_done >= self.config.EPSILON_DECAY_STEPS:
@@ -151,14 +163,13 @@ class IDQNAgent:
         return loss.item()
 
     def soft_update_target(self):
-        for target_param, policy_param in zip(
-            self.target_net.parameters(), self.policy_net.parameters()
-        ):
-            # Polyak averaging (soft update): θ_target ← τ·θ + (1-τ)·θ_target
-            target_param.data.copy_(
-                self.config.TAU * policy_param.data
-                + (1 - self.config.TAU) * target_param.data
-            )
+        # Polyak averaging (soft update): θ_target ← τ·θ + (1-τ)·θ_target
+        # Usa _foreach_lerp_ para vetorizar a operação sobre todos os parâmetros
+        torch._foreach_lerp_(
+            list(self.target_net.parameters()),
+            list(self.policy_net.parameters()),
+            self.config.TAU,
+        )
 
     def save_checkpoint(self, save_dir):
         try:
