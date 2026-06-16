@@ -10,6 +10,7 @@ Extraído de: Código/Ambiente e Execução IDQN - Versão 1.3.0.py
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 
 import numpy as np
@@ -51,6 +52,8 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
     }
 
     best_reward = -float("inf")
+    # Background I/O pool — checkpoints and CSV writes don't block the train loop
+    _io_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="io")
 
     print(f"\n🚀 Iniciando sessão {session_id:04d}")
     print(f"   Episódios: {start_episode} → {total_episodes}")
@@ -77,8 +80,10 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
 
             episode_collisions = info["collisions"]
 
-            for agent in agents:
-                agent.optimize()
+            # Optimize each agent independently — parallel when buffer is ready
+            with ThreadPoolExecutor(max_workers=len(agents)) as ex:
+                futures = [ex.submit(agent.optimize) for agent in agents]
+                wait(futures)
 
             obs = next_obs
 
@@ -109,23 +114,33 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
                     pass
 
         if config.SAVE_CHECKPOINTS and (episode + 1) % config.SAVE_CHECKPOINT_EVERY == 0:
-            try:
-                checkpoint_dir = session_dir / f"checkpoint_{episode + 1}"
-                os.makedirs(checkpoint_dir, exist_ok=True)
-                for agent in agents:
-                    agent.save_checkpoint(checkpoint_dir)
+            # Snapshot metrics and agent states now; write to disk in background
+            _ckpt_dir = session_dir / f"checkpoint_{episode + 1}"
+            _ckpt_ep = episode + 1
+            _ckpt_rewards = metrics["episode_rewards"][:]
+            _ckpt_deliveries = metrics["episode_deliveries"][:]
+            _agents_snap = agents  # agents are not replaced between episodes
 
-                pd.DataFrame(
-                    {
-                        "episode": range(len(metrics["episode_rewards"])),
-                        "reward": metrics["episode_rewards"],
-                        "deliveries": metrics["episode_deliveries"],
-                    }
-                ).to_csv(
-                    metrics_dir / f"metrics_checkpoint_{episode + 1}.csv", index=False
-                )
-            except Exception as e:
-                print(f"\n  ⚠️ Erro ao salvar checkpoint: {e}")
+            def _write_checkpoint(ckpt_dir, ep, rewards, deliveries, ag, mdir):
+                try:
+                    os.makedirs(ckpt_dir, exist_ok=True)
+                    for agent in ag:
+                        agent.save_checkpoint(ckpt_dir)
+                    pd.DataFrame(
+                        {
+                            "episode": range(len(rewards)),
+                            "reward": rewards,
+                            "deliveries": deliveries,
+                        }
+                    ).to_csv(mdir / f"metrics_checkpoint_{ep}.csv", index=False)
+                except Exception as e:
+                    print(f"\n  ⚠️ Erro ao salvar checkpoint: {e}")
+
+            _io_pool.submit(
+                _write_checkpoint,
+                _ckpt_dir, _ckpt_ep, _ckpt_rewards, _ckpt_deliveries,
+                _agents_snap, metrics_dir,
+            )
 
         if (episode + 1) % 100 == 0:
             recent_rewards = metrics["episode_rewards"][-100:]
@@ -140,6 +155,7 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
             )
 
     env.close()
+    _io_pool.shutdown(wait=True)  # Flush pending checkpoint writes before returning
 
     try:
         df = pd.DataFrame(
