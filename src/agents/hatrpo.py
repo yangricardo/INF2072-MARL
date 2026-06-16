@@ -12,6 +12,7 @@ Adaptado ao env simples do ``src/``: estados por-robô via
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 
 import numpy as np
@@ -258,11 +259,14 @@ def run(config=None, num_sessions=1, record_video=True):
         buf = TrajectoryBuffer()
 
         for step in range(config.MAX_STEPS):
-            actions, log_probs = [], []
-            for i, agent in enumerate(agents):
-                action, log_prob = agent.select_action(all_states[i], training=True)
-                actions.append(action)
-                log_probs.append(log_prob)
+            # select_action in parallel — each agent has independent network and state
+            with ThreadPoolExecutor(max_workers=n_agents) as ex:
+                results = list(ex.map(
+                    lambda t: t[0].select_action(t[1], training=True),
+                    [(agents[i], all_states[i]) for i in range(n_agents)],
+                ))
+            actions = [r[0] for r in results]
+            log_probs = [r[1] for r in results]
 
             value = critic.get_value(global_state)
             _, rewards, terminated, truncated, info = env.step(actions)
@@ -290,14 +294,21 @@ def run(config=None, num_sessions=1, record_video=True):
             )
             if len(advantages) > 1 and advantages.std() > 1e-8:
                 advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+            # Critic must update before actors (provides the shared advantage estimate)
             critic.update(traj["global_states"], returns)
-            for i, agent in enumerate(agents):
-                agent_states = traj["states"][:, i * state_dim : (i + 1) * state_dim]
-                agent_actions = traj["actions"][:, i]
-                agent_old_log_probs = traj["log_probs"][:, i]
-                agent.update_actor(
-                    agent_states, agent_actions, advantages, agent_old_log_probs
-                )
+            # update_actor in parallel — each actor has independent network and optimizer
+            with ThreadPoolExecutor(max_workers=n_agents) as ex:
+                futures = [
+                    ex.submit(
+                        agents[i].update_actor,
+                        traj["states"][:, i * state_dim : (i + 1) * state_dim],
+                        traj["actions"][:, i],
+                        advantages,
+                        traj["log_probs"][:, i],
+                    )
+                    for i in range(n_agents)
+                ]
+                wait(futures)
 
         metrics["episode_rewards"].append(ep_reward)
         metrics["episode_deliveries"].append(info["total_deliveries"])
