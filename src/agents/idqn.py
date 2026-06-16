@@ -81,8 +81,11 @@ class IDQNAgent:
             return random.randrange(self.action_dim)
 
         with torch.no_grad():
+            self.policy_net.eval()
             state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
             q_values = self.policy_net(state_tensor)
+            if training:
+                self.policy_net.train()
             return q_values.argmax().item()
 
     def remember(self, state, action, reward, next_state, done):
