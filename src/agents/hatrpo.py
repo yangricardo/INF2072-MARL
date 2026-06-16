@@ -47,6 +47,8 @@ class HATRPOAgentOptimized:
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=config.ACTOR_LR)
 
         self.steps_done = 0
+        # epsilon is unused for on-policy (Categorical sampling drives exploration).
+        # Kept for interface compatibility and logging; has no effect on action selection.
         self.epsilon = config.EPSILON_START
         self.total_episodes = 0
 
