@@ -165,12 +165,14 @@ class VDNController:
     def _soft_update(self):
         # Polyak averaging (soft update) — vetorizado via _foreach_lerp_
         # para cada par (policy_net, target_net)
-        for pnet, tnet in zip(self.policy_nets, self.target_nets):
-            torch._foreach_lerp_(
-                list(tnet.parameters()),
-                list(pnet.parameters()),
-                self.config.TAU,
-            )
+        # B10: torch.no_grad() necessário pois _foreach_lerp_ é in-place em leaf tensors
+        with torch.no_grad():
+            for pnet, tnet in zip(self.policy_nets, self.target_nets):
+                torch._foreach_lerp_(
+                    list(tnet.parameters()),
+                    list(pnet.parameters()),
+                    self.config.TAU,
+                )
 
     def _hard_update(self):
         for pnet, tnet in zip(self.policy_nets, self.target_nets):
