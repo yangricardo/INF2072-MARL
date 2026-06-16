@@ -1206,3 +1206,51 @@ Isso eliminaria:
 - **N8**: soft update vetorizado uma vez
 - **E1**: GAE O(n²) corrigido na base
 - **E2/E3**: otimizações na base
+
+---
+
+## 🔴 Fase 10 — Diagnóstico: por que o IDQN não entrega ≥4 caixas (2026-06-16)
+
+**Sintoma**: `python -m src.main --algo idqn --episodes 1500` estaciona em ~1.3–1.8 entregas/episódio
+(reward subindo de −143 → −44), nunca atingindo a meta de **≥4 entregas**.
+
+### Evidência empírica (CSVs reais em `out/`)
+
+| Algoritmo | Entregas média | Máx | % ep. ≥4 |
+| --------- | -------------- | --- | -------- |
+| random (baseline, 3000 ep) | 0,51 | 3 | **0%** |
+| idqn (100 ep) | 0,82 | 3 | **0%** |
+| hatrpo (3000 ep) | 1,09 | 3 | **0%** |
+| mappo (3000 ep) | 0,51 → **colapsa a 0** | 2 | **0%** |
+
+**Nenhum** algoritmo atinge 4, e os treinados mal superam o aleatório. Como a falha é compartilhada por
+todos, a causa-raiz está no **ambiente/recompensa/tarefa**, não num bug específico do IDQN. Os agentes
+aprendem o fácil (evitar paredes, farmar shaping de proximidade) mas não a cadeia esparsa
+pegar→atravessar o labirinto→soltar no alvo.
+
+### Causas-raiz (em ordem de impacto)
+
+| ID   | Causa                                                                                                                                                                                                                  | Severidade | Status |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------ |
+| D1   | **Avaliação gananciosa quebrada**: `evaluate_and_record_video` alimentava a obs **global (40)** numa rede treinada com obs **por-robô (43)** → `RuntimeError (1x40 vs 43x512)`. Com `--no-video` não há avaliação gananciosa nenhuma; o "1.67" é média **com exploração ε≈0.3–0.76**, subestimando muito a política real. | 🔴 CRÍTICO | ✅ CORRIGIDO |
+| D2   | **γ=0.95 curto demais**: horizonte efetivo ~20 passos, mas o ciclo de entrega é ~25–40 passos. O +25 da entrega e o +50 terminal mal propagam até as decisões de pickup/navegação.                                     | 🔴 CRÍTICO | ✅ CORRIGIDO (γ=0.99) |
+| D3   | **Shaping não potential-based** (apesar do README afirmar que "cancela"): assimétrico (`+0.1·Δ` perto vs `−0.02·Δ` longe) cria **ciclo de farming** (~+0.07 líquido por 2 passos ao oscilar) → ótimo local de farmar proximidade em vez de entregar. | 🔴 CRÍTICO | ✅ CORRIGIDO (PBRS `F=d_t−γ·d_{t+1}`) |
+| D4   | **Drop fora do alvo = −2.0** torna tóxica a única ação que pontua; na exploração drops ruins superam o raro +25 → Q(drop) enviesado negativo, agente evita soltar.                                                      | 🟠 ALTO    | ✅ CORRIGIDO (−0.1) |
+| D5   | **Tarefa cara demais p/ a meta**: 8 caixas, carga única por robô, 2 robôs, labirinto, 500 passos. README/comentários/plot assumiam **4 caixas** ("Meta 4 entregas") → o mapa fora escalado 4→8 sem re-tunar nem atualizar docs. | 🟠 ALTO    | ✅ CORRIGIDO (mapa = 4 caixas/4 alvos) |
+| D6   | **Hipers lentos/ruidosos**: `LR=5e-5` baixo + `Dropout=0.2` injetando ruído na regressão de Q (anti-padrão em value-based) + `EPSILON_DECAY_STEPS=1e6` (ε nunca anelava dentro da sessão). Docs/comentários contradiziam o código. | 🟡 MÉDIO   | ✅ CORRIGIDO (LR 1e-4, dropout 0.0, ε_decay 200k) |
+| D7   | **Limite do IDQN (secundário)**: aprendizes independentes sem coordenação → políticas redundantes (mesma caixa, bloqueio mútuo). Por isso o repo tem VDN/QMIX. Limita o teto, mas não é o gargalo (todos os algos falham). | 🟢 BAIXO   | 📝 DOCUMENTADO |
+
+### Correções aplicadas
+
+| Arquivo            | Mudança                                                                                                              |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `evaluation.py`    | `evaluate_and_record_video` usa `_get_observation_for_robot(i)` por robô (27-dim), como o treino — fim do mismatch.  |
+| `config.py`        | `MAP_CONFIG`: blocos reduzidos a **4 caixas + 4 alvos** (esvaziadas a linha 2 de `A` e a linha 10 de `B`).           |
+| `config.py`        | `IDQNConfig`: `GAMMA 0.95→0.99`, `LEARNING_RATE 5e-5→1e-4`, `DROPOUT_RATE 0.2→0.0`, `EPSILON_DECAY_STEPS 1e6→200000`. |
+| `environment.py`   | `_drop_box`: drop fora do alvo `−2.0→−0.1`. `_calculate_shaped_reward`: shaping **potential-based** `0.1·(d_t−γ·d_{t+1})`, guard de transição só em pickup/entrega. |
+| `README.md`        | Obs dims (24/27 + flag de inventário), tabela de recompensas (move inválido −0.05, drop −0.1, shaping PBRS) e tabela de hipers do IDQN alinhadas ao código. |
+
+> **Nota de design**: com 4 caixas, "≥4 entregas" = 100% de conclusão (o bônus terminal +50 vira o sinal de
+> meta). Se quiser margem (≥4 = ~67%), basta manter 6 caixas (alterar 2 células de `A` no `MAP_CONFIG`).
+> Carga múltipla por robô (reduziria viagens) fica como alternativa futura — exige mudar `robot_carrying`
+> de `int|None` para contagem/lista e o flag de inventário da observação.
