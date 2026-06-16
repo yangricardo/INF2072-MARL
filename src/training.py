@@ -34,6 +34,8 @@ def _should_optimize(agent, config):
         return False
     if agent.steps_done < config.LEARNING_STARTS:
         return False
+    if agent.steps_done % config.TRAIN_FREQ != 0:
+        return False
     return True
 
 
