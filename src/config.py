@@ -137,6 +137,7 @@ class VDNConfig(BaseConfig):
     USE_SOFT_UPDATE = True
 
     MAX_STEPS = 500               # Sincronizado com a base (1000 quebrava o balanceamento de passos)
+    EPISODES_TOTAL: int = 1500
     BASE_DIR = "resultados_warehouse_vdn_otimizado"
 
 
