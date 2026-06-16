@@ -32,11 +32,12 @@ MAP_CONFIG = {
 class BaseConfig:
     """Parâmetros compartilhados pelo ambiente e pelo loop de treino."""
 
-    MAX_STEPS = 500
-    EPISODES_PER_SESSION = 1500
-    BASE_DIR = "resultados_warehouse"
-    SAVE_CHECKPOINTS = True
-    SAVE_CHECKPOINT_EVERY = 500
+    # anotados explicitamente (não-Literal) pois são sobrescritos em runtime
+    MAX_STEPS: int = 500
+    EPISODES_PER_SESSION: int = 1500
+    BASE_DIR: str = "resultados_warehouse"
+    SAVE_CHECKPOINTS: bool = True
+    SAVE_CHECKPOINT_EVERY: int = 500
 
 
 class IDQNConfig(BaseConfig):
@@ -112,7 +113,7 @@ class VDNConfig(BaseConfig):
     USE_SOFT_UPDATE = True
 
     MAX_STEPS = 1000
-    EPISODES_TOTAL = 1500  # default; o runner ajusta para o total real de episódios
+    EPISODES_TOTAL: int = 1500  # default; o runner ajusta para o total real de episódios
     BASE_DIR = "resultados_warehouse_vdn"
 
 
