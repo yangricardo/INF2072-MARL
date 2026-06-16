@@ -179,7 +179,7 @@ class WarehouseEnv(gym.Env):
             return -0.005
         else:
             self.collisions += 1
-            return -0.02
+            return -0.05 # Punição severa para o robô odiar bater na parede
 
     def _pickup_box(self, robot_id):
         if self.robot_carrying[robot_id] is not None:
