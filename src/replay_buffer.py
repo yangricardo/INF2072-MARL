@@ -8,26 +8,39 @@ import numpy as np
 
 
 class SumTree:
-    """Árvore binária completa para soma de prioridades (Segment Tree / SumTree).
-
-    Capacidade fixa alocada no construtor. Operações de sample, update e
-    max_priority em O(log N). Mantém duas árvores:
-    - ``sum_tree``: soma das prioridades (para sample)
-    - ``max_tree``: máximo das prioridades (para O(1) max_priority)
+    """Árvore binária de soma vetorizada de alta performance.
+    Elimina loops Python usando indexação avançada do NumPy.
     """
 
     def __init__(self, capacity: int):
         self.capacity = capacity
-        # sum_tree[0] = raiz (soma total), sum_tree[capacity-1] = último nó interno
-        # sum_tree[capacity..2*capacity-1] = folhas (prioridades individuais)
         self.sum_tree = np.zeros(2 * capacity, dtype=np.float64)
-        # max_tree paralela — mesma estrutura, cada nó = max dos filhos
         self.max_tree = np.zeros(2 * capacity, dtype=np.float64)
         self._write_index = 0
         self._size = 0
 
-    def _propagate(self, idx: int):
-        """Sobe pela árvore atualizando os pais (sum e max) após mudança em uma folha."""
+    def total(self) -> float:
+        return float(self.sum_tree[1])
+
+    def max_priority(self) -> float:
+        if self._size == 0:
+            return 1.0
+        return float(self.max_tree[1])
+
+    @property
+    def size(self) -> int:
+        return self._size
+
+    def __len__(self) -> int:
+        return self._size
+
+    def add(self, priority: float):
+        """Insere um elemento isolado (usado no push)."""
+        idx = self.capacity + self._write_index
+        self.sum_tree[idx] = priority
+        self.max_tree[idx] = priority
+        
+        # Propagação clássica para um único item (leve)
         parent = idx // 2
         while parent >= 1:
             left = 2 * parent
@@ -36,71 +49,57 @@ class SumTree:
             self.max_tree[parent] = max(self.max_tree[left], self.max_tree[right])
             parent //= 2
 
-    def add(self, priority: float):
-        """Adiciona/sobrescreve uma folha com a prioridade dada."""
-        idx = self.capacity + self._write_index
-        self.sum_tree[idx] = priority
-        self.max_tree[idx] = priority
-        self._propagate(idx)
         self._write_index = (self._write_index + 1) % self.capacity
         if self._size < self.capacity:
             self._size += 1
 
-    def update(self, index: int, priority: float):
-        """Atualiza a prioridade de uma folha pelo índice linear (buffer index)."""
-        idx = self.capacity + index
-        self.sum_tree[idx] = priority
-        self.max_tree[idx] = priority
-        self._propagate(idx)
-
     def sample(self, batch_size: int, rng: np.random.Generator) -> np.ndarray:
-        """Amostra batch_size índices proporcionais às prioridades.
-
-        Percorre a árvore da raiz até as folhas, usando um valor aleatório
-        uniforme [0, total_sum) em cada percurso.
-        """
-        indices = np.empty(batch_size, dtype=np.int64)
+        """Amostra um lote inteiro de uma só vez sem nenhum laço 'for' em Python."""
         total = self.total()
         if total == 0.0:
-            return np.random.randint(0, self._size, size=batch_size)
-        segment = total / batch_size
-        for i in range(batch_size):
-            # Amostra dentro do segmento i-ésimo para stratified sampling
-            a = segment * i
-            b = segment * (i + 1)
-            value = rng.uniform(a, b)
-            indices[i] = self._retrieve(value)
-        return indices
+            return rng.integers(0, self._size, size=batch_size)
 
-    def _retrieve(self, value: float) -> int:
-        """Desce na árvore a partir da raiz até encontrar a folha correspondente a 'value'."""
-        idx = 1  # raiz
-        while idx < self.capacity:
+        # Amostragem estratificada puramente vetorizada
+        segment = total / batch_size
+        a = segment * np.arange(batch_size)
+        b = segment * (np.arange(batch_size) + 1)
+        values = rng.uniform(a, b)
+
+        # Desce na árvore com o lote inteiro simultaneamente
+        idx = np.ones(batch_size, dtype=np.int64)
+        while np.any(idx < self.capacity):
             left = 2 * idx
             right = left + 1
-            if value <= self.sum_tree[left]:
-                idx = left
-            else:
-                value -= self.sum_tree[left]
-                idx = right
-        return idx - self.capacity  # converte de índice na árvore para índice do buffer
+            
+            # Captura a árvore de somas dos filhos esquerdos de todo o batch
+            left_sums = self.sum_tree[left]
+            
+            # Mascaramento Booleano Vetorizado
+            go_left = values <= left_sums
+            idx = np.where(go_left, left, right)
+            values = np.where(go_left, values, values - left_sums)
 
-    def max_priority(self) -> float:
-        """Retorna a maior prioridade armazenada (O(1) — lê a raiz da max_tree)."""
-        if self._size == 0:
-            return 1.0
-        return float(self.max_tree[1])
+        return idx - self.capacity
 
-    def total(self) -> float:
-        """Soma de todas as prioridades (raiz da sum_tree)."""
-        return float(self.sum_tree[1])
+    def batch_update(self, indices: np.ndarray, priorities: np.ndarray):
+        """Atualiza múltiplos índices de uma vez só, subindo a árvore por camadas."""
+        idx = self.capacity + indices
+        self.sum_tree[idx] = priorities
+        self.max_tree[idx] = priorities
 
-    @property
-    def size(self) -> int:
-        return self._size
-
-    def __len__(self) -> int:
-        return self._size
+        # Sobe a árvore camada por camada (profundidade máxima fixa log2 de capacity)
+        parents = idx // 2
+        while np.any(parents >= 1):
+            unique_parents = np.unique(parents)
+            if unique_parents[0] == 0:
+                unique_parents = unique_parents[unique_parents >= 1]
+            
+            left = 2 * unique_parents
+            right = left + 1
+            
+            self.sum_tree[unique_parents] = self.sum_tree[left] + self.sum_tree[right]
+            self.max_tree[unique_parents] = np.maximum(self.max_tree[left], self.max_tree[right])
+            parents = unique_parents // 2
 
 
 class PrioritizedReplayBuffer:
@@ -155,10 +154,7 @@ class PrioritizedReplayBuffer:
         total_n = self.tree.size
 
         # Probabilities P(i) = p_i / sum(p_j)
-        probs = np.array(
-            [self.tree.sum_tree[self.tree.capacity + idx] / total for idx in indices],
-            dtype=np.float64,
-        )
+        probs = self.tree.sum_tree[self.tree.capacity + indices] / total
 
         # Importance-sampling correction: w_i = (N * P(i))^(-beta) / max_j(w_j)
         weights = (total_n * probs) ** (-beta)
@@ -178,9 +174,10 @@ class PrioritizedReplayBuffer:
         )
 
     def update_priorities(self, indices, td_errors):
-        for idx, td_error in zip(indices, td_errors):
-            priority = (abs(td_error) + 1e-6) ** self.alpha
-            self.tree.update(idx, priority)
+        # Vetoriza o cálculo do expoente alpha de uma só vez
+        priorities = (np.abs(td_errors) + 1e-6) ** self.alpha
+        # Dispara a atualização por camadas
+        self.tree.batch_update(indices, priorities)
 
     def __len__(self):
         return self.tree.size
