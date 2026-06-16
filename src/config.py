@@ -65,7 +65,7 @@ class IDQNConfig(BaseConfig):
     # 1. Exploração estendida (Garante que eles mapeiem o mapa antes de bitolar na rede)
     EPSILON_START = 1.0
     EPSILON_END = 0.05
-    EPSILON_DECAY_STEPS = 200000  # ε→0.05 por volta do ep 400 (1M nunca anelava dentro de uma sessão)
+    EPSILON_DECAY_STEPS = 1200000  # ε→0.05 por volta do ep 400 (1M nunca anelava dentro de uma sessão)
 
     # 2. Aprendizado Ágil (Combate a não-estacionaridade de múltiplos agentes)
     LEARNING_RATE = 0.0001   # 5e-5 era lento demais; 1e-4 acelera sem desestabilizar
@@ -179,9 +179,10 @@ class QMIXConfig(BaseConfig):
 
 
 class MAPPOConfig(BaseConfig):
-    """Multi-Agent PPO (atores por agente + crítico centralizado).
+    """Multi-Agent PPO canônico (ator compartilhado + crítico centralizado único).
 
-    Extraído de: Código/Executa Experimento MPPO.ipynb (classe Config, 3ª versão).
+    Extraído de: Código/Executa Experimento MPPO.ipynb (classe Config, 3ª versão),
+    migrado ao MAPPO canônico (Yu et al. 2022) em src/agents/mappo.py.
     """
 
     # Otimização de Atores e Crítico Centralizado (GAE)
@@ -200,6 +201,11 @@ class MAPPOConfig(BaseConfig):
     # Tamanho do Buffer On-Policy por Episódio
     BATCH_SIZE = 64
     MINI_BATCH_SIZE = 32
+
+    # Coleta on-policy: nº de episódios acumulados por atualização (reduz a variância
+    # vs. atualizar a cada 1 episódio) e early-stop por KL aproximado (anti-colapso).
+    ROLLOUT_EPISODES = 4
+    TARGET_KL = 0.02
 
     # REMOVIDOS os parâmetros de Epsilon-Greedy (Incompatíveis com amostragem estocástica via Categorical)
     # REMOVIDO LEARNING_STARTS para permitir que o algoritmo atualize logo após o primeiro episódio coletado
