@@ -209,7 +209,7 @@ class WarehouseEnv(gym.Env):
                 self.grid[robot_pos[0]][robot_pos[1]] = f"R{robot_id + 1}"
                 return 25.0
 
-        return -0.05
+        return -25.0  # Penalização severa para soltar fora do alvo, incentivando precisão
 
     def _calculate_shaped_reward(self, robot_id, base_reward):
         reward = base_reward
