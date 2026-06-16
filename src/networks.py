@@ -67,7 +67,9 @@ class AgentNet(nn.Module):
                 nn.init.orthogonal_(m.weight, gain=2 ** 0.5)
                 nn.init.constant_(m.bias, 0.0)
         # última camada com gain menor → outputs inicialmente próximos de 0
-        nn.init.orthogonal_(self.net[-1].weight, gain=0.01)
+        last_layer = self.net[-1]
+        if isinstance(last_layer, nn.Linear):
+            nn.init.orthogonal_(last_layer.weight, gain=0.01)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
