@@ -45,7 +45,7 @@ class WarehouseEnv(gym.Env):
         self.num_actions = NUM_ACTIONS
 
         self.delivered_boxes: list[bool] = []
-        self.robot_carrying: dict[int, int | None] = {}  # robot_id -> box_id (or None)
+        self.robot_carrying: dict[int, int | None] = {i: None for i in range(self.num_robots)}  # robot_id -> box_id (or None)
         self.steps = 0
         self.max_steps = self.config.MAX_STEPS
         self.total_deliveries = 0
@@ -184,6 +184,9 @@ class WarehouseEnv(gym.Env):
             return -0.02
 
     def _pickup_box(self, robot_id):
+        if self.robot_carrying[robot_id] is not None:
+            # Robot already carrying a box; cannot pick up another
+            return -0.02
         robot_pos = self.robot_positions[robot_id]
         for box_id, box_pos in enumerate(self.box_positions):
             if not self.delivered_boxes[box_id] and box_pos == robot_pos:
