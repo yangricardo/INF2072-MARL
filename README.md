@@ -317,7 +317,7 @@ y = \sum_{i=1}^{2} r_i + \gamma \sum_{i=1}^{2} \max_{a'_i} Q_i^{-}(o'_i, a'_i) \
 **Rede de mistura** (Rashid et al. 2018) — pesos W₁, w₂ ≥ 0 via `abs()` nas hiper-redes garantem monotonicidade — [`networks.py` linhas 114–126](src/networks.py#L114-L126):
 
 ```math
-Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(\mathbf{W}_1(s)\,\mathbf{q} + \mathbf{b}_1(s)\right) + b_2(s)
+Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \mathrm{ReLU}\!\left(\mathbf{W}_1(s)\,\mathbf{q} + \mathbf{b}_1(s)\right) + b_2(s)
 ```
 
 ```math
@@ -394,7 +394,7 @@ r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid
 ```
 
 ```math
-\mathcal{L}^{\text{CLIP}}(\theta) = \mathbb{E}_t\!\left[\min\!\left(r_t\,\hat{A}_t,\;\operatorname{clip}(r_t,1-\varepsilon,1+\varepsilon)\,\hat{A}_t\right)\right]
+\mathcal{L}^{\text{CLIP}}(\theta) = \mathbb{E}_t\!\left[\min\!\left(r_t\,\hat{A}_t,\;\mathrm{clip}(r_t,1-\varepsilon,1+\varepsilon)\,\hat{A}_t\right)\right]
 ```
 
 ```math
@@ -473,7 +473,7 @@ r_t(\theta_i) = \frac{\pi_{\theta_i}(a \mid s)}{\pi_{\theta_i^{\text{old}}}(a \m
 ```
 
 ```math
-\mathcal{L}_{\text{actor}} = -\mathbb{E}_t\!\left[\min\!\left(r_t\,\hat{A}_t,\;\operatorname{clip}(r_t,1-\varepsilon,1+\varepsilon)\,\hat{A}_t\right)\right] - c_H\,H[\pi]
+\mathcal{L}_{\text{actor}} = -\mathbb{E}_t\!\left[\min\!\left(r_t\,\hat{A}_t,\;\mathrm{clip}(r_t,1-\varepsilon,1+\varepsilon)\,\hat{A}_t\right)\right] - c_H\,H[\pi]
 ```
 
 GAE do crítico centralizado — [`hatrpo.py` linhas 161–173](src/agents/hatrpo.py#L161-L173). A cada `TARGET_UPDATE_FREQ=100` passos: `actor_old.load_state_dict(actor.state_dict())`
