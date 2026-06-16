@@ -49,6 +49,8 @@ class MAPPOAgent:
         self.global_states = []
 
         self.steps_done = 0
+        # epsilon is unused for on-policy (Categorical sampling drives exploration).
+        # Kept for interface compatibility and logging; has no effect on action selection.
         self.epsilon = config.EPSILON_START
 
     def get_epsilon(self):
