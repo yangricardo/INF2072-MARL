@@ -1289,3 +1289,40 @@ máx 2). Além disso, a versão anterior **nem instanciava** com o `MAPPOConfig`
 Também: `config.py` ganhou `ROLLOUT_EPISODES=4` e `TARGET_KL=0.02`; `agents/__init__.py` exporta
 `MAPPOController` (antes `MAPPOAgent`). Interface `mappo.run(config, num_sessions, record_video)` preservada
 (`main.py` inalterado). Smoke de 30 ep roda e grava vídeo sem erro; validação de tendência (600 ep) em `out/mappo_fix`.
+
+**Resultado (600 ep, `out/mappo_fix`)**: o colapso sumiu. Antes 0.51 → **0.00** (últimos 200);
+agora sobe e **estabiliza em ~2.2** (últimos 200 = 2.21, picos em 4, reward +34→+44). Ainda não é ≥4
+consistente, mas estável e crescente — value-clipping + early-stop por KL + GAE correto resolveram o colapso.
+
+---
+
+## 🟠 Fase 12 — Revisão do VDN + migração para execução descentralizada (2026-06-16)
+
+**Contexto**: diferente do MAPPO, o VDN **já era estruturalmente sólido** — roda sem crash, `Q_tot = Σ_i Q_i`
+e os alvos Double-DQN estão corretos, e somar as recompensas por-agente (`R.sum(dim=1)`) **é** o team return
+correto (não é um bug, ao contrário do que sugeria a auditoria da Fase 2).
+
+### Achados
+
+| ID  | Local                          | Problema                                                                                                                                                              | Sev. | Status |
+| --- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------ |
+| VD1 | `vdn.py` `select_actions`/`optimize` | **Obs global para os dois agentes**: ambas as redes recebiam o mesmo estado global. Viola a execução descentralizada do VDN (cada `Q_i` deveria agir em `o_i`) e era inconsistente com IDQN/MAPPO (obs por-robô 27-dim, com id + flag de inventário). | 🟠 ALTO | ✅ MIGRADO |
+| VD2 | `config.py` `VDNConfig`        | Dropout 0.2 ativo na regressão de Q (policy nets em `train()` no `optimize`) → ruído no alvo TD.                                                                       | 🟡 MÉDIO | 📝 RECOMENDADO (não aplicado) |
+| VD3 | `vdn.py` `optimize`            | **Landmine**: `config.TARGET_UPDATE_FREQ` não existe no `VDNConfig` → `AttributeError` se `USE_SOFT_UPDATE=False` (ramo morto hoje).                                  | 🟢 BAIXO | ✅ (guard `getattr`) |
+| VD4 | `config.py` `VDNConfig`        | `GAMMA=0.97` (vs 0.99 do IDQN/MAPPO) — horizonte um pouco curto.                                                                                                      | 🟢 BAIXO | 📝 RECOMENDADO |
+| VD5 | `replay_buffer.py`             | `VDNPrioritizedReplayBuffer.sample` usa `np.random.choice` O(N) (o IDQN ganhou SumTree, o VDN não).                                                                    | 🟢 BAIXO | 📝 PENDENTE (perf) |
+
+### Correção (escopo escolhido: migração para obs local)
+
+- `select_actions(local_obs)`: cada rede `i` decide a partir de `local_obs[i]` (slice por-agente).
+- `optimize()`: o batch de estados agora tem shape `[B, n_agents, 27]`; cada `Q_i` avalia `S[:, i, :]`
+  (e `enumerate` no loop do alvo Double-DQN). **Buffer inalterado** — `VDNPrioritizedReplayBuffer` é
+  agnóstico ao shape do `state` (empilha `[B, n, d]` naturalmente).
+- `run()`: `state_dim = len(_get_observation_for_robot(0))` (27); coleta `local_obs`/`next_local_obs`
+  por-robô e guarda `np.stack(...)`. A lambda de vídeo passa as obs por-agente.
+- **VD3**: `getattr(self.config, "TARGET_UPDATE_FREQ", 200)` (safety, sem mudança de comportamento).
+- Docstring atualizado para "obs local por-robô".
+
+**Recomendado, não aplicado** (mudam comportamento; fora do escopo da migração): `DROPOUT_RATE 0.2→0.0` e
+`GAMMA 0.97→0.99` no `VDNConfig`. Sanity OK (`state_dim=27`, batch `[B,2,27]`, optimize roda); smoke de
+30 ep roda e grava vídeo; validação de tendência (600 ep) em `out/vdn_fix`.

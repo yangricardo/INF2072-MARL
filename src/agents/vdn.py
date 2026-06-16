@@ -3,9 +3,10 @@
 Extraído de: Código/Executa Experimento VDN.ipynb (VDNController, run_vdn_training).
 
 Aprendizado centralizado / execução descentralizada: um único otimizador treina
-as duas redes Q individuais com perda conjunta sobre a observação global
-compartilhada do ``WarehouseEnv``. Adaptado para o ambiente simples do ``src/``
-(sem falhas) e para as utilidades de saída comuns (CSV/plot/vídeo).
+as redes Q individuais com perda conjunta, mas **cada ``Q_i`` age na sua observação
+local por-robô** (``_get_observation_for_robot``) — execução descentralizada de fato.
+Adaptado para o ambiente simples do ``src/`` (sem falhas) e para as utilidades de
+saída comuns (CSV/plot/vídeo).
 """
 
 import os
@@ -85,28 +86,28 @@ class VDNController:
             self.config.EPSILON_END - self.config.EPSILON_START
         )
 
-    def select_actions(self, obs, training=True):
-        """obs: observação global compartilhada; devolve uma ação por agente."""
+    def select_actions(self, local_obs, training=True):
+        """local_obs: lista de observações locais por-robô; devolve uma ação por agente."""
         self.steps_done += 1
         eps = self.get_epsilon() if training else 0.0
         actions = []
-        
+
         # Otimização Crítica: Sorteia a exploração ANTES de tocar no PyTorch ou na GPU
         agent_explores = [training and np.random.random() < eps for _ in range(self.n_agents)]
-        
+
         # Se ambos os agentes decidirem explorar aleatoriamente, evitamos 100% o custo da GPU
         if all(agent_explores):
             return [np.random.randint(self.action_dim) for _ in range(self.n_agents)]
-            
+
         with torch.no_grad():
-            # Só criamos o tensor se pelo menos um agente precisar consultar a rede neural
-            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
+            # Execução descentralizada: cada Q_i avalia a SUA própria observação local.
+            obs_t = torch.as_tensor(np.asarray(local_obs), dtype=torch.float32, device=self.device)
             for i, net in enumerate(self.policy_nets):
                 if agent_explores[i]:
                     actions.append(np.random.randint(self.action_dim))
                 else:
                     net.eval()
-                    q = net(obs_t)
+                    q = net(obs_t[i : i + 1])
                     if training:
                         net.train()
                     actions.append(int(q.argmax(dim=1).item()))
@@ -138,19 +139,19 @@ class VDNController:
         D = torch.as_tensor(dones, dtype=torch.float32, device=self.device)
         W = torch.as_tensor(weights, dtype=torch.float32, device=self.device)
 
-        # Q_total atual
+        # Q_total atual — cada Q_i avalia a SUA observação local S[:, i, :]
         q_total = torch.zeros(self.config.BATCH_SIZE, device=self.device)
         for i, net in enumerate(self.policy_nets):
-            q_vals = net(S)
+            q_vals = net(S[:, i, :])
             q_a = q_vals.gather(1, A[:, i].unsqueeze(1)).squeeze(1)
             q_total = q_total + q_a
 
-        # Q_total target (Double DQN por agente)
+        # Q_total target (Double DQN por agente), também sobre a obs local de cada um
         with torch.no_grad():
             q_total_next = torch.zeros(self.config.BATCH_SIZE, device=self.device)
-            for pnet, tnet in zip(self.policy_nets, self.target_nets):
-                next_a = pnet(S_).argmax(dim=1, keepdim=True)
-                next_q = tnet(S_).gather(1, next_a).squeeze(1)
+            for i, (pnet, tnet) in enumerate(zip(self.policy_nets, self.target_nets)):
+                next_a = pnet(S_[:, i, :]).argmax(dim=1, keepdim=True)
+                next_q = tnet(S_[:, i, :]).gather(1, next_a).squeeze(1)
                 q_total_next = q_total_next + next_q
             r_total = R.sum(dim=1)
             y = r_total + self.config.GAMMA * q_total_next * (1 - D)
@@ -169,7 +170,7 @@ class VDNController:
 
         if self.config.USE_SOFT_UPDATE:
             self._soft_update()
-        elif self.learning_steps % self.config.TARGET_UPDATE_FREQ == 0:
+        elif self.learning_steps % getattr(self.config, "TARGET_UPDATE_FREQ", 200) == 0:
             self._hard_update()
 
         loss_val = loss.item()
@@ -208,10 +209,12 @@ def run(config=None, num_sessions=1, record_video=True):
     os.makedirs(base_dir, exist_ok=True)
 
     env = WarehouseEnv(config=config)
-    obs, _ = env.reset()
-    state_dim = len(obs)
+    env.reset()
+    n_agents = env.num_robots
+    # Execução descentralizada: cada Q_i age na obs local por-robô (27-dim), não na global.
+    state_dim = len(env._get_observation_for_robot(0))
     action_dim = env.num_actions
-    controller = VDNController(2, state_dim, action_dim, config)
+    controller = VDNController(n_agents, state_dim, action_dim, config)
 
     metrics = {
         "episode_rewards": [],
@@ -222,17 +225,21 @@ def run(config=None, num_sessions=1, record_video=True):
     }
 
     for ep in tqdm(range(total_episodes), desc="VDN"):
-        obs, info = env.reset()
+        _, info = env.reset()
+        local_obs = [env._get_observation_for_robot(i) for i in range(n_agents)]
         ep_reward = 0.0
         step = 0
         for step in range(config.MAX_STEPS):
-            actions = controller.select_actions(obs, training=True)
-            nobs, rewards, terminated, truncated, info = env.step(actions)
+            actions = controller.select_actions(local_obs, training=True)
+            _, rewards, terminated, truncated, info = env.step(actions)
             done = terminated or truncated
-            controller.remember(obs, actions, rewards, nobs, float(done))
+            next_local_obs = [env._get_observation_for_robot(i) for i in range(n_agents)]
+            controller.remember(
+                np.stack(local_obs), actions, rewards, np.stack(next_local_obs), float(done)
+            )
             controller.optimize()
             ep_reward += sum(rewards)
-            obs = nobs
+            local_obs = next_local_obs
             if done:
                 break
                 
@@ -278,7 +285,9 @@ def run(config=None, num_sessions=1, record_video=True):
         os.makedirs(results_dir, exist_ok=True)
         video_path = record_policy_video(
             config,
-            lambda env, obs: controller.select_actions(obs, training=False),
+            lambda env, _obs: controller.select_actions(
+                [env._get_observation_for_robot(i) for i in range(n_agents)], training=False
+            ),
             results_dir,
         )
 

@@ -122,7 +122,7 @@ Cada robô possui 6 ações discretas:
 - Posições normalizadas dos 4 alvos: 4 × 2 = 8 valores
 - Distância mínima de cada robô à caixa mais próxima + ao alvo mais próximo: 2 × 2 = 4 valores
 
-**Observação por robô (27-dim)** — usada por IDQN no treino e por MAPPO/HATRPO: observação global
+**Observação por robô (27-dim)** — usada por IDQN, VDN, MAPPO e HATRPO: observação global
 (24-dim) + one-hot de 2 bits identificando o robô (`[1,0]`/`[0,1]`) + 1 flag de inventário
 (`1.0` se está carregando uma caixa, `0.0` caso contrário). As dimensões são derivadas do mapa em
 runtime (`len(env._get_observation_for_robot(0))`), então mudam automaticamente se o mapa mudar.
@@ -267,8 +267,9 @@ y_i = r_i + \gamma \, Q_{\theta^-}\!\left(s'_i,\, \arg\max_{a'} Q_\theta(s'_i, a
 
 **Como funciona:**
 
-- `VDNController` centraliza ambas as redes (`policy_nets: ModuleList[AgentNet]`) num único otimizador Adam.
-- Transições **conjuntas** `(s, [a₁,a₂], [r₁,r₂], s', done)` são armazenadas no `VDNPrioritizedReplayBuffer`.
+- `VDNController` centraliza as redes (`policy_nets: ModuleList[AgentNet]`) num único otimizador Adam.
+- **Execução descentralizada:** cada `Q_i` age na sua **observação local por-robô** `o_i` (27-dim, com one-hot de id + flag de inventário), não na observação global.
+- Transições **conjuntas** `([o₁,o₂], [a₁,a₂], [r₁,r₂], [o'₁,o'₂], done)` são armazenadas no `VDNPrioritizedReplayBuffer`.
 - **Fatoração aditiva (VDN):** soma dos Q-values individuais, permitindo execução descentralizada (Sunehag et al. 2017):
 
 ```math
@@ -289,19 +290,20 @@ Q_{\text{tot}}(s, a_1, a_2) = Q_1(o_1, a_1) + Q_2(o_2, a_2)
 y = \sum_{i=1}^{2} r_i + \gamma \sum_{i=1}^{2} \max_{a'_i} Q_i^{-}(o'_i, a'_i) \cdot (1 - d)
 ```
   
-- Learning rate com _cosine annealing_ ao longo de todos os episódios. Soft update das target nets com τ=0,005.
+- Learning rate com _cosine annealing_ ao longo de todos os episódios. Soft update das target nets com τ=0,001.
 
 **Hiperparâmetros principais:**
 
 | Parâmetro       | Valor   |
 | --------------- | ------- |
-| Learning rate   | 0,0003  |
-| Batch size      | 256     |
+| Learning rate   | 0,0001  |
+| Batch size      | 64      |
 | γ (desconto)    | 0,97    |
-| τ (soft update) | 0,005   |
-| Hidden dim      | 256     |
-| Buffer size     | 200 000 |
-| ε_decay_steps   | 120 000 |
+| τ (soft update) | 0,001   |
+| Hidden dim      | 512     |
+| Dropout         | 0,2     |
+| Buffer size     | 500 000 |
+| ε_decay_steps   | 200 000 |
 
 **Referência:**
 
