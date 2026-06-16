@@ -9,6 +9,7 @@ baseline aleatório.
 """
 
 from concurrent.futures import ThreadPoolExecutor
+from functools import cached_property
 
 import imageio
 import matplotlib.pyplot as plt
@@ -17,6 +18,7 @@ import numpy as np
 from .environment import WarehouseEnv
 
 # Shared background pool for video encoding and plot saving (I/O-bound)
+# Call _bg_pool.shutdown(wait=True) at application exit to ensure all I/O completes.
 _bg_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="eval_io")
 
 
