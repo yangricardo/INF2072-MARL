@@ -4,11 +4,29 @@ Centraliza o ``MAP_CONFIG`` (antes duplicado em cada script/notebook) e as
 classes de configuração. ``BaseConfig`` reúne os parâmetros usados pelo ambiente
 e pelo loop de treino; ``IDQNConfig`` acrescenta os hiperparâmetros do IDQN e
 ``RandomConfig`` serve ao baseline aleatório.
+
+Dispositivo unificado (M5): ``DEVICE`` detecta automaticamente CUDA → MPS → CPU.
 """
 
 # Mapa da grade do armazém:
 #   '0' livre | 'X' parede | 'Y' barreira | 'R1'/'R2' robôs
 #   'A' caixa (origem) | 'B' alvo (entrega)
+import torch
+
+
+def get_device():
+    """Detecta o melhor device disponível: CUDA → Apple MPS → CPU."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
+
+DEVICE = get_device()
+
+
 MAP_CONFIG = {
     "height": 12,
     "width": 8,
