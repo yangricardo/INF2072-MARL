@@ -228,20 +228,36 @@ def plot_consolidated_results(metrics, save_dir):
     axes[1, 1].grid(True, alpha=0.3)
     axes[1, 1].set_facecolor("white")
 
-    # 6. Resumo
-    axes[1, 2].axis("off")
-    final_stats = {
-        "Total Episódios": len(metrics["episode_rewards"]),
-        "Melhor Recompensa": f"{np.max(metrics['episode_rewards']):.2f}",
-        "Média Entregas": f"{np.mean(metrics['episode_deliveries'][-100:]):.2f}",
-        "Taxa Sucesso Final": f"{metrics['success_rates'][-1]:.1%}",
-    }
-
-    axes[1, 2].text(0.1, 0.9, "📊 RESUMO FINAL", fontsize=12, fontweight="bold")
-    y = 0.8
-    for key, value in final_stats.items():
-        axes[1, 2].text(0.1, y, f"{key}: {value}", fontsize=10)
-        y -= 0.1
+    # 6. Distância percorrida
+    if "distance_traveled" in metrics and len(metrics["distance_traveled"]) > 0:
+        axes[1, 2].plot(metrics["distance_traveled"], color="brown", alpha=0.5)
+        if len(metrics["distance_traveled"]) >= 100:
+            moving_avg_dt = np.convolve(
+                metrics["distance_traveled"], np.ones(100) / 100, mode="valid"
+            )
+            axes[1, 2].plot(
+                range(99, len(metrics["distance_traveled"])),
+                moving_avg_dt, "r-", linewidth=2,
+            )
+        axes[1, 2].set_title("Distância Percorrida")
+        axes[1, 2].set_xlabel("Episódio")
+        axes[1, 2].set_ylabel("Passos totais")
+        axes[1, 2].grid(True, alpha=0.3)
+        axes[1, 2].set_facecolor("white")
+    else:
+        # Fallback: painel de resumo se não houver distance_traveled
+        axes[1, 2].axis("off")
+        final_stats = {
+            "Total Episódios": len(metrics["episode_rewards"]),
+            "Melhor Recompensa": f"{np.max(metrics['episode_rewards']):.2f}",
+            "Média Entregas": f"{np.mean(metrics['episode_deliveries'][-100:]):.2f}",
+            "Taxa Sucesso Final": f"{metrics['success_rates'][-1]:.1%}",
+        }
+        axes[1, 2].text(0.1, 0.9, "📊 RESUMO FINAL", fontsize=12, fontweight="bold")
+        y = 0.8
+        for key, value in final_stats.items():
+            axes[1, 2].text(0.1, y, f"{key}: {value}", fontsize=10)
+            y -= 0.1
 
     plt.tight_layout()
     fig_snap = fig  # capture reference before potential GC
