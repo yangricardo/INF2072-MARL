@@ -7,6 +7,39 @@ Análise completa do código em `src/` e subdiretórios, identificando bugs, inc
 
 ---
 
+## ✅ Correções Aplicadas
+
+| ID | Arquivo | Status | Descrição |
+|---|---|---|---|
+| C1 | src/networks.py | ✅ CORRIGIDO | QMixer: adicionado `torch.abs()` aos pesos W1 e W2 para garantir monotonicidade |
+| C2 | src/environment.py | ✅ CORRIGIDO | `_drop_box`: adicionado dict `robot_carrying` para rastrear qual robô carrega qual caixa |
+| C3 | src/environment.py | ✅ CORRIGIDO | Bônus terminal +50: movido para fora de `_calculate_shaped_reward`, aplicado uma única vez por step |
+| C4 | src/replay_buffer.py | ✅ CORRIGIDO | `PrioritizedReplayBuffer` e `QMIXPrioritizedReplayBuffer`: adicionado `** self.alpha` em `update_priorities` |
+| C5 | src/replay_buffer.py | ✅ CORRIGIDO | `VDNPrioritizedReplayBuffer`: `_max_priority` armazenado como valor raw, alpha aplicado apenas no armazenamento |
+| I1 | src/networks.py | ✅ CORRIGIDO | `ImprovedCriticNetwork`: adicionada conexão residual no loop de camadas ocultas |
+| I2 | src/agents/idqn.py | ✅ CORRIGIDO | `squeeze()` → `squeeze(1)` em 2 linhas para evitar colapso com batch_size=1 |
+| I3 | src/agents/mappo.py | ✅ CORRIGIDO | Variável `values` rebind: renomeada para `batch_values` no loop de mini-batches |
+| I5 | src/training.py | ✅ CORRIGIDO | `distance_traveled` adicionado à `consolidated_metrics` |
+| I6 | src/training.py | ✅ CORRIGIDO | Checkpoint: nome alterado de `best_agent_{i}_ep{episode}.pth` para `best_agent_{i}_best.pth` |
+| N1 | src/config.py, src/agents/hatrpo.py | ✅ CORRIGIDO | `CLIP_EPS`: adicionado ao `HATRPOConfig` e usado em lugar do hardcoded `0.8, 1.2` |
+| N2 | src/config.py, src/agents/hatrpo.py | ✅ CORRIGIDO | `TAU`: adicionado ao `HATRPOConfig` e usado em lugar do hardcoded `0.005` |
+
+---
+
+## Pendente (não crítico)
+
+| ID | Arquivo | Status | Descrição |
+|---|---|---|---|
+| I4 | src/agents/mappo.py, hatrpo.py | TODO | Usar retorno direto de `env.reset()` em vez de API privada |
+| D1 | src/utils.py (novo) | TODO | Extrair `compute_gae` para função reutilizável |
+| D2 | src/evaluation.py | TODO | Extrair consolidação de métricas para função reutilizável |
+| E1 | src/agents/mappo.py, hatrpo.py | TODO | Mudar `advantages.insert(0)` para `append` + `reverse` (O(n) em vez de O(n²)) |
+| E2 | src/agents/qmix.py | TODO | Reutilizar `curr_qs` em vez de chamar `get_q_values` duas vezes |
+
+---
+
+---
+
 ## 🔴 Bugs Críticos (afetam correção dos algoritmos)
 
 ### C1 — `src/networks.py` · QMixer sem `torch.abs()` viola monotonicidade
