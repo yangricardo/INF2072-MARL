@@ -35,7 +35,11 @@ def evaluate_and_record_video(agents, config, save_dir, num_episodes=1):
     for episode in range(num_episodes):
         print(f"\n📹 Gravando episódio {episode + 1}/{num_episodes}...")
 
-        obs, _ = env.reset()
+        env.reset()
+        # Cada agente decide a partir da SUA observação local por-robô (43-dim), como no
+        # treino — NÃO da obs global de reset()/step() (40-dim), que causaria mismatch de
+        # shape (mat1 1x40 vs mat2 43x512) e quebraria a avaliação gananciosa.
+        local_obs = [env._get_observation_for_robot(i) for i in range(len(agents))]
         episode_reward = 0
         episode_deliveries = 0
         step = 0
@@ -46,13 +50,16 @@ def evaluate_and_record_video(agents, config, save_dir, num_episodes=1):
             except Exception as e:
                 print(f"  ⚠️ Erro ao capturar frame: {e}")
 
-            actions = [agent.select_action(obs, training=False) for agent in agents]
-            next_obs, rewards, terminated, truncated, info = env.step(actions)
+            actions = [
+                agents[i].select_action(local_obs[i], training=False)
+                for i in range(len(agents))
+            ]
+            _, rewards, terminated, truncated, info = env.step(actions)
+            local_obs = [env._get_observation_for_robot(i) for i in range(len(agents))]
 
             episode_reward += sum(rewards)
             episode_deliveries = info["total_deliveries"]
             step += 1
-            obs = next_obs
 
             if terminated or truncated:
                 try:
