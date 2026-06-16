@@ -7,6 +7,7 @@ por isso é reutilizada. O estado global vem de ``env._get_global_state()``.
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -222,7 +223,9 @@ def run(config=None, num_sessions=1, record_video=True):
         ep_reward = 0.0
         step = 0
         for step in range(config.MAX_STEPS):
-            actions = [agent.select_action(obs) for agent in agents]
+            # select_action in parallel — each agent has independent network and state
+            with ThreadPoolExecutor(max_workers=len(agents)) as ex:
+                actions = list(ex.map(lambda a: a.select_action(obs), agents))
             next_obs, rewards, terminated, truncated, info = env.step(actions)
             next_global_state = env._get_global_state()
             trainer.remember(
