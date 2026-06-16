@@ -230,6 +230,12 @@ def run_training(agent_class, config, num_sessions=1, record_video=True):
 
     agents = [agent_class(state_dim, action_dim, i, config) for i in range(2)]
 
+    # N11: Configura o total de steps de treino para annealing do beta no PER
+    total_train_steps = config.EPISODES_PER_SESSION * num_sessions * config.MAX_STEPS
+    for agent in agents:
+        if hasattr(agent, 'set_total_train_steps'):
+            agent.set_total_train_steps(total_train_steps)
+
     all_metrics = []
     total_episodes_done = 0
     last_session_dir = None
