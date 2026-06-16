@@ -183,6 +183,8 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 
 ### Baseline Aleatório (Random)
 
+> Implementação: [src/agents/random_agent.py](src/agents/random_agent.py) ([`select_action` linha 21](src/agents/random_agent.py#L21))
+
 **O que é:** Um agente sem aprendizado que seleciona ações uniformemente ao acaso. Serve como limite inferior de desempenho — qualquer algoritmo de RL deve superá-lo.
 
 **Como funciona:**
@@ -196,15 +198,17 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 
 ### IDQN — Independent Deep Q-Network
 
+> Implementação: [src/agents/idqn.py](src/agents/idqn.py) · [src/replay_buffer.py](src/replay_buffer.py) (`PrioritizedReplayBuffer`)
+
 **O que é:** Cada robô treina uma Q-network independente sem coordenação explícita. É o ponto de partida mais simples do paradigma MARL: múltiplos agentes DQN treinando em paralelo no mesmo ambiente.
 
 **Como funciona:**
 
 - Cada `IDQNAgent` mantém uma `policy_net` e uma `target_net` (`ImprovedDQN`).
-- **Seleção de ação:** epsilon-greedy com decaimento linear de ε: 1,0 → 0,05 em 50 000 passos.
+- **Seleção de ação:** epsilon-greedy com decaimento linear de ε: 1,0 → 0,05 em 50 000 passos ([`get_epsilon` linha 55](src/agents/idqn.py#L55)).
 - **Memória:** `PrioritizedReplayBuffer` (PER) com α=0,6, β=0,4 — transições com maior erro TD são amostradas com maior frequência.
 
-  **Prioridade normalizada e importance-sampling weights** (Schaul et al. 2015):
+**Prioridade normalizada e importance-sampling weights** (Schaul et al. 2015) — [`replay_buffer.py` linhas 37–45](src/replay_buffer.py#L37-L45):
 
 ```math
 p_i = \frac{|\delta_i|^\alpha}{\sum_j |\delta_j|^\alpha}, \qquad w_i = \frac{(N \cdot p_i)^{-\beta}}{\max_j w_j}
@@ -212,19 +216,19 @@ p_i = \frac{|\delta_i|^\alpha}{\sum_j |\delta_j|^\alpha}, \qquad w_i = \frac{(N 
 
 - **Atualização (Double DQN):** a `policy_net` seleciona a ação greedy; a `target_net` avalia o valor, reduzindo viés de superestimação.
 
-  **TD-target** (Mnih et al. 2015; van Hasselt et al. 2016):
+**TD-target** (Mnih et al. 2015; van Hasselt et al. 2016) — [`idqn.py` linhas 118–123](src/agents/idqn.py#L118-L123):
 
 ```math
 y_i = r_i + \gamma \, Q_{\theta^-}\!\left(s'_i,\, \arg\max_{a'} Q_\theta(s'_i, a')\right) \cdot (1 - d_i)
 ```
 
-  **Loss com pesos PER:**
+**Loss com pesos PER** — [`idqn.py` linhas 130–132](src/agents/idqn.py#L130-L132):
 
 ```math
 \mathcal{L}(\theta) = \mathbb{E}_i\!\left[ w_i \cdot \bigl(y_i - Q_\theta(s_i, a_i)\bigr)^2 \right]
 ```
 
-- **Soft update:** Polyak averaging com τ=0,001. Treino começa após 1 000 transições e ocorre a cada 4 passos.
+**Soft update** (Polyak averaging, τ=0,001) — [`idqn.py` linhas 153–160](src/agents/idqn.py#L153-L160):
 
 ```math
 \theta^{-} \leftarrow \tau\,\theta + (1-\tau)\,\theta^{-}
@@ -310,7 +314,7 @@ y = \sum_{i=1}^{2} r_i + \gamma \sum_{i=1}^{2} \max_{a'_i} Q_i^{-}(o'_i, a'_i) \
 - O `QMixer` recebe Q-values individuais e o estado global; hiper-redes geram pesos W1, W2 ≥ 0 (via `abs()`) garantindo monotonicidade.
 - `QMIXPrioritizedReplayBuffer` armazena transições enriquecidas com estados globais: `(s, [a₁,a₂], [r₁,r₂], s', done, global_s, next_global_s)`.
 
-**Rede de mistura** (Rashid et al. 2018) — pesos W₁, w₂ ≥ 0 via `abs()` nas hiper-redes garantem monotonicidade:
+**Rede de mistura** (Rashid et al. 2018) — pesos W₁, w₂ ≥ 0 via `abs()` nas hiper-redes garantem monotonicidade — [`networks.py` linhas 114–126](src/networks.py#L114-L126):
 
 ```math
 Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(\mathbf{W}_1(s)\,\mathbf{q} + \mathbf{b}_1(s)\right) + b_2(s)
@@ -320,7 +324,7 @@ Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(
 \frac{\partial Q_{\text{tot}}}{\partial Q_i} \geq 0 \quad \forall\, i
 ```
 
-**`QMIXTrainer.optimize()`** — loss MSE ponderada por PER:
+**`QMIXTrainer.optimize()`** — loss MSE ponderada por PER — [`qmix.py` linhas 149–163](src/agents/qmix.py#L149-L163):
 
 ```math
 \mathcal{L}_{\text{mixer}} = \mathbb{E}\!\left[w \cdot \bigl(y - Q_{\text{tot}}^\theta\bigr)^2\right]
@@ -330,7 +334,7 @@ Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(
 y = \sum_i r_i + \gamma\, Q_{\text{tot}}^{-}(s', \mathbf{a}^*) \cdot (1-d)
 ```
 
-Por agente: loss contrafactual (similar ao COMA) usando $(y - Q_{\text{tot}})^{\text{detach}} \cdot Q_i$. Soft update das target nets com τ=0,001.
+Por agente: loss contrafactual ([`qmix.py` linha 169](src/agents/qmix.py#L169)) usando $(y - Q_{\text{tot}})^{\text{detach}} \cdot Q_i$. Soft update das target nets com τ=0,001 ([`qmix.py` linhas 85–92](src/agents/qmix.py#L85-L92)).
 
 **Hiperparâmetros principais:**
 
@@ -365,7 +369,7 @@ Por agente: loss contrafactual (similar ao COMA) usando $(y - Q_{\text{tot}})^{\
 
 **1.** Computa V(s) com o crítico centralizado.
 
-**2. GAE** — Generalized Advantage Estimation (Schulman et al. 2016):
+**2. GAE** — Generalized Advantage Estimation (Schulman et al. 2016) — [`mappo.py` linhas 86–96](src/agents/mappo.py#L86-L96):
 
 ```math
 \delta_t = r_t + \gamma\,V(s_{t+1})(1-d_t) - V(s_t)
@@ -383,7 +387,7 @@ Por agente: loss contrafactual (similar ao COMA) usando $(y - Q_{\text{tot}})^{\
 \hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}
 ```
 
-**3. PPO_EPOCHS=10** repetições com mini-batches de 32:
+**3. PPO_EPOCHS=10** repetições com mini-batches de 32 — [`mappo.py` linhas 140–156](src/agents/mappo.py#L140-L156):
 
 ```math
 r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}
@@ -440,7 +444,7 @@ H[\pi] = -\sum_{a}\pi(a \mid s)\log\pi(a \mid s)
 
 **Atualização pós-episódio:**
 
-**1. Crítico** — MSE loss + Polyak soft update:
+**1. Crítico** — MSE loss + Polyak soft update — [`hatrpo.py` linhas 138–157](src/agents/hatrpo.py#L138-L157):
 
 ```math
 \mathcal{L}_{\text{critic}} = \mathbb{E}\!\left[\bigl(V(s) - \hat{R}_t\bigr)^2\right]
@@ -462,7 +466,7 @@ _Formulação teórica_ — restrição de região de confiança via KL-divergen
 \text{s.t.} \quad \mathbb{E}_s\!\left[D_{\mathrm{KL}}\!\left(\pi_i^{\text{old}}(\cdot \mid s)\,\|\,\pi_i(\cdot \mid s)\right)\right] \leq \delta
 ```
 
-_Implementação prática_ — PPO clip como aproximação ao trust-region (ε=0,2 ≈ MAX_KL=0,02):
+_Implementação prática_ — PPO clip como aproximação ao trust-region (ε=0,2 ≈ MAX_KL=0,02) — [`hatrpo.py` linhas 89–99](src/agents/hatrpo.py#L89-L99):
 
 ```math
 r_t(\theta_i) = \frac{\pi_{\theta_i}(a \mid s)}{\pi_{\theta_i^{\text{old}}}(a \mid s)}
@@ -472,7 +476,7 @@ r_t(\theta_i) = \frac{\pi_{\theta_i}(a \mid s)}{\pi_{\theta_i^{\text{old}}}(a \m
 \mathcal{L}_{\text{actor}} = -\mathbb{E}_t\!\left[\min\!\left(r_t\,\hat{A}_t,\;\operatorname{clip}(r_t,1-\varepsilon,1+\varepsilon)\,\hat{A}_t\right)\right] - c_H\,H[\pi]
 ```
 
-A cada `TARGET_UPDATE_FREQ=100` passos: `actor_old.load_state_dict(actor.state_dict())`
+GAE do crítico centralizado — [`hatrpo.py` linhas 161–173](src/agents/hatrpo.py#L161-L173). A cada `TARGET_UPDATE_FREQ=100` passos: `actor_old.load_state_dict(actor.state_dict())`
 
 **Hiperparâmetros principais:**
 
