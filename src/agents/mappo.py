@@ -143,8 +143,8 @@ class MAPPOAgent:
                 entropy = -(probs * torch.log(probs + 1e-10)).sum(dim=1).mean()
                 actor_loss = actor_loss - self.config.ENTROPY_COEF * entropy
 
-                values = self.critic(batch_global_states).squeeze(-1)
-                critic_loss = F.mse_loss(values, batch_returns)
+                batch_values = self.critic(batch_global_states).squeeze(-1)
+                critic_loss = F.mse_loss(batch_values, batch_returns)
 
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
