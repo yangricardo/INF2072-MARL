@@ -110,7 +110,9 @@ class WarehouseEnv(gym.Env):
         self.box_positions = [pos for pos in self._find_positions("A")]
         self.delivered_boxes = [False] * self.num_boxes
         self.robot_carrying = {i: None for i in range(self.num_robots)}  # reset carrying status
-        # Cache de índices ativos para evitar O(n²) em _min_distance_to_boxes
+        # Índices de caixas ativas (não entregues) — mantido por clareza,
+        # mas tem impacto mínimo (apenas 4 caixas). A lista é atualizada
+        # em _drop_box() quando uma caixa é entregue.
         self._active_box_indices = list(range(self.num_boxes))
 
         self.steps = 0
