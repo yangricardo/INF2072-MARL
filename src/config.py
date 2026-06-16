@@ -33,7 +33,7 @@ MAP_CONFIG = {
     "grid": [
         ["R1", "0", "0", "0", "0", "0", "0", "R2"],
         ["0", "Y", "A", "A", "A", "A", "0", "0"],
-        ["0", "0", "A", "A", "A", "A", "0", "0"],
+        ["0", "0", "0", "0", "0", "0", "0", "0"],
         ["X", "0", "0", "0", "X", "0", "Y", "0"],
         ["0", "Y", "X", "0", "0", "0", "0", "0"],
         ["0", "0", "0", "X", "0", "Y", "X", "X"],
@@ -41,7 +41,7 @@ MAP_CONFIG = {
         ["0", "0", "0", "X", "0", "0", "0", "0"],
         ["X", "0", "Y", "0", "0", "0", "X", "0"],
         ["X", "0", "B", "B", "B", "B", "X", "0"],
-        ["X", "0", "B", "B", "B", "B", "Y", "0"],
+        ["X", "0", "0", "0", "0", "0", "Y", "0"],
         ["0", "0", "0", "Y", "0", "0", "0", "0"],
     ],
 }
@@ -65,21 +65,21 @@ class IDQNConfig(BaseConfig):
     # 1. Exploração estendida (Garante que eles mapeiem o mapa antes de bitolar na rede)
     EPSILON_START = 1.0
     EPSILON_END = 0.05
-    EPSILON_DECAY_STEPS = 200000  # Seu ajuste estendido
+    EPSILON_DECAY_STEPS = 200000  # ε→0.05 por volta do ep 400 (1M nunca anelava dentro de uma sessão)
 
     # 2. Aprendizado Ágil (Combate a não-estacionaridade de múltiplos agentes)
-    LEARNING_RATE = 0.00005  # LR mais baixo estabiliza o treino quando um interfere no outro
-    BATCH_SIZE = 128          # Lotes menores focam em experiências temporalmente mais frescas
-    GAMMA = 0.95
-    TAU = 0.001
+    LEARNING_RATE = 0.0001   # 5e-5 era lento demais; 1e-4 acelera sem desestabilizar
+    BATCH_SIZE = 64          # Lotes menores focam em experiências temporalmente mais frescas
+    GAMMA = 0.99             # horizonte ~100 passos cobre o ciclo pegar→atravessar→soltar (0.95 era curto)
+    TAU = 0.005
     WEIGHT_DECAY = 1e-5
 
     # Rede neural
     HIDDEN_DIM = 512
-    DROPOUT_RATE = 0.2
+    DROPOUT_RATE = 0.0       # dropout injeta ruído na regressão de Q (anti-padrão em value-based DQN)
 
     # 3. Correção do Replay Buffer Prioritário (Compensa o erro do contador de passos)
-    BUFFER_SIZE = 500000
+    BUFFER_SIZE = 100000
     PRIORITIZED_REPLAY = True
     ALPHA = 0.6
     BETA_START = 0.6         # Começa mais alto para mitigar o lento avanço do beta annealing
@@ -87,8 +87,8 @@ class IDQNConfig(BaseConfig):
 
     # 4. Treinamento Agressivo 
     MAX_GRAD_NORM = 1.0
-    LEARNING_STARTS = 1000
-    TRAIN_FREQ = 8           # Treina a cada 4 passos para permitir que o replay buffer acumule experiências mais diversas
+    LEARNING_STARTS = 2000
+    TRAIN_FREQ = 4           # Treina a cada 4 passos para permitir que o replay buffer acumule experiências mais diversas
     USE_SOFT_UPDATE = True
 
     BASE_DIR = "resultados_warehouse_idqn"
