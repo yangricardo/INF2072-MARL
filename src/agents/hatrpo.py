@@ -82,6 +82,9 @@ class HATRPOAgentOptimized:
         as an approximation with fixed per-agent update order. Full HATRPO would require
         conjugate gradient descent and explicit KL constraint enforcement.
         """
+        # N15: skip update before enough environment steps have been collected
+        if self.steps_done < getattr(self.config, 'LEARNING_STARTS', 0):
+            return 0
         states_tensor = torch.FloatTensor(states).to(self.device)
         actions_tensor = torch.LongTensor(actions).to(self.device)
         advantages_tensor = torch.FloatTensor(advantages).to(self.device)
