@@ -1,0 +1,7 @@
+numpy>=1.26
+gymnasium>=0.29
+torch>=2.2
+matplotlib>=3.8
+pandas>=2.1
+imageio[ffmpeg]>=2.34
+tqdm>=4.66
