@@ -111,14 +111,18 @@ class QMIXTrainer:
         self.memory = QMIXPrioritizedReplayBuffer(config.BUFFER_SIZE, alpha=config.ALPHA)
         self.mixer_optimizer = optim.Adam(mixer.parameters(), lr=config.LEARNING_RATE)
         self.learning_steps = 0
+        self._total_steps = 0  # N16: contagem total de steps para LEARNING_STARTS guard
 
     def remember(self, state, actions, rewards, next_state, done, global_state, next_global_state):
         self.memory.push(
             state, actions, rewards, next_state, done, global_state, next_global_state
         )
+        self._total_steps += 1
 
     def optimize(self):
         if len(self.memory) < self.config.BATCH_SIZE:
+            return 0
+        if self._total_steps < self.config.LEARNING_STARTS:
             return 0
 
         self.learning_steps += 1
