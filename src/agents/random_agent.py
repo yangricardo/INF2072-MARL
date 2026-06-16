@@ -17,6 +17,7 @@ class RandomAgent:
         self.config = config
         self.steps_done = 0
         self.total_episodes = 0
+        self.memory = []  # B9: compatibilidade com _should_optimize()
 
     def select_action(self, state, training=True):
         self.steps_done += 1
