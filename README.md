@@ -300,6 +300,8 @@ y = \sum_{i=1}^{2} r_i + \gamma \sum_{i=1}^{2} \max_{a'_i} Q_i^{-}(o'_i, a'_i) \
 
 ### QMIX — Monotonic Value Function Factorisation
 
+> Implementação: [src/agents/qmix.py](src/agents/qmix.py) · [src/networks.py](src/networks.py) (`QMixer`)
+
 **O que é:** Estende o VDN ao permitir pesos de mistura não-lineares mas **monotônicos**: Q_total = f(Q₁, Q₂; estado_global), onde f é uma rede de mistura (_mixer_) condicionada no estado global via hiper-redes. A monotonicidade garante que o argmax sobre Q_total é equivalente ao argmax sobre as Q-functions individuais, preservando a execução descentralizada.
 
 **Como funciona:**
@@ -307,8 +309,8 @@ y = \sum_{i=1}^{2} r_i + \gamma \sum_{i=1}^{2} \max_{a'_i} Q_i^{-}(o'_i, a'_i) \
 - Cada `QMIXAgent` mantém `policy_net` e `target_net` (ImprovedDQN).
 - O `QMixer` recebe Q-values individuais e o estado global; hiper-redes geram pesos W1, W2 ≥ 0 (via `abs()`) garantindo monotonicidade.
 - `QMIXPrioritizedReplayBuffer` armazena transições enriquecidas com estados globais: `(s, [a₁,a₂], [r₁,r₂], s', done, global_s, next_global_s)`.
-  
-**Rede de mistura QMIX** (Rashid et al. 2018) com monotonicidade garantida — pesos W₁, w₂ ≥ 0 (via `abs()`) das hiper-redes garantem:
+
+**Rede de mistura** (Rashid et al. 2018) — pesos W₁, w₂ ≥ 0 via `abs()` nas hiper-redes garantem monotonicidade:
 
 ```math
 Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(\mathbf{W}_1(s)\,\mathbf{q} + \mathbf{b}_1(s)\right) + b_2(s)
@@ -318,10 +320,14 @@ Q_{\text{tot}}(\mathbf{q}, s) = \mathbf{w}_2(s)^\top \operatorname{ReLU}\!\left(
 \frac{\partial Q_{\text{tot}}}{\partial Q_i} \geq 0 \quad \forall\, i
 ```
 
-**`QMIXTrainer.optimize()`:** computa Q-values correntes e targets via mixer/target-mixer, aplica loss MSE com pesos PER:
+**`QMIXTrainer.optimize()`** — loss MSE ponderada por PER:
 
 ```math
-\mathcal{L}_{\text{mixer}} = \mathbb{E}\!\left[w \cdot \bigl(y - Q_{\text{tot}}^\theta\bigr)^2\right], \qquad y = \sum_i r_i + \gamma\, Q_{\text{tot}}^{-} \cdot (1-d)
+\mathcal{L}_{\text{mixer}} = \mathbb{E}\!\left[w \cdot \bigl(y - Q_{\text{tot}}^\theta\bigr)^2\right]
+```
+
+```math
+y = \sum_i r_i + \gamma\, Q_{\text{tot}}^{-}(s', \mathbf{a}^*) \cdot (1-d)
 ```
 
 Por agente: loss contrafactual (similar ao COMA) usando $(y - Q_{\text{tot}})^{\text{detach}} \cdot Q_i$. Soft update das target nets com τ=0,001.
@@ -346,24 +352,35 @@ Por agente: loss contrafactual (similar ao COMA) usando $(y - Q_{\text{tot}})^{\
 
 ### MAPPO — Multi-Agent PPO
 
+> Implementação: [src/agents/mappo.py](src/agents/mappo.py)
+
 **O que é:** Extensão multi-agente do PPO (_Proximal Policy Optimization_) no paradigma CTDE. Cada agente possui um **ator individual** (política descentralizada); um **crítico centralizado** compartilha o estado global para estimar V(s) durante o treinamento.
 
 **Como funciona:**
 
 - `MAPPOAgent` contém `ActorNetwork` (entrada: obs local 24-dim) e `CriticNetwork` (entrada: estado global 22-dim), com otimizadores Adam separados.
 - **Coleta:** por episódio, armazena estados locais, ações, log-probs, recompensas e estados globais.
+
 **Atualização pós-episódio:**
 
 **1.** Computa V(s) com o crítico centralizado.
 
-**2. GAE** (Generalized Advantage Estimation, Schulman et al. 2016):
+**2. GAE** — Generalized Advantage Estimation (Schulman et al. 2016):
 
 ```math
-\delta_t = r_t + \gamma V(s_{t+1})(1-d_t) - V(s_t), \qquad \hat{A}_t = \sum_{l=0}^{\infty}(\gamma\lambda)^l\,\delta_{t+l}
+\delta_t = r_t + \gamma\,V(s_{t+1})(1-d_t) - V(s_t)
 ```
 
 ```math
-\hat{R}_t = \hat{A}_t + V(s_t), \qquad \hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}
+\hat{A}_t = \sum_{l=0}^{\infty}(\gamma\lambda)^l\,\delta_{t+l}
+```
+
+```math
+\hat{R}_t = \hat{A}_t + V(s_t)
+```
+
+```math
+\hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}
 ```
 
 **3. PPO_EPOCHS=10** repetições com mini-batches de 32:
@@ -377,7 +394,11 @@ r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid
 ```
 
 ```math
-\mathcal{L}_{\text{actor}} = -\mathcal{L}^{\text{CLIP}} - c_H\,H[\pi], \qquad H[\pi] = -\sum_{a}\pi(a|s)\log\pi(a|s)
+\mathcal{L}_{\text{actor}} = -\mathcal{L}^{\text{CLIP}} - c_H\,H[\pi]
+```
+
+```math
+H[\pi] = -\sum_{a}\pi(a \mid s)\log\pi(a \mid s)
 ```
 
 ```math
@@ -407,6 +428,8 @@ r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid
 
 ### HATRPO — Hierarchical Actor Trust-Region Policy Optimisation
 
+> Implementação: [src/agents/hatrpo.py](src/agents/hatrpo.py)
+
 **O que é:** Variante multi-agente do TRPO (_Trust Region Policy Optimization_) com restrição de região de confiança por agente. Os atores usam redes residuais e treinam **sequencialmente** (um agente por vez) usando vantagens estimadas por um crítico centralizado compartilhado — essa atualização sequencial é a característica "hierárquica" do algoritmo.
 
 **Como funciona:**
@@ -414,6 +437,7 @@ r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid
 - `HATRPOAgentOptimized`: `ImprovedActorNetwork` (residual) + rede-alvo `actor_old` para monitorar divergência de política.
 - `CentralizedCriticOptimized`: `ImprovedCriticNetwork` (residual) com soft update (τ=0,005) da target; responsável pelo GAE.
 - `TrajectoryBuffer`: acumula a trajetória completa do episódio com estados achatados de ambos os agentes.
+
 **Atualização pós-episódio:**
 
 **1. Crítico** — MSE loss + Polyak soft update:
@@ -431,7 +455,11 @@ r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid
 _Formulação teórica_ — restrição de região de confiança via KL-divergence:
 
 ```math
-\max_{\pi_i}\;\mathbb{E}\!\left[A_i(s,\mathbf{a})\right] \quad\text{s.t.}\quad \mathbb{E}_s\!\left[D_{\mathrm{KL}}\!\left(\pi_i^{\text{old}}(\cdot|s)\,\|\,\pi_i(\cdot|s)\right)\right] \leq \delta
+\max_{\pi_i}\;\mathbb{E}\!\left[A_i(s,\mathbf{a})\right]
+```
+
+```math
+\text{s.t.} \quad \mathbb{E}_s\!\left[D_{\mathrm{KL}}\!\left(\pi_i^{\text{old}}(\cdot \mid s)\,\|\,\pi_i(\cdot \mid s)\right)\right] \leq \delta
 ```
 
 _Implementação prática_ — PPO clip como aproximação ao trust-region (ε=0,2 ≈ MAX_KL=0,02):
