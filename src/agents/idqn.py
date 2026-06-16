@@ -118,16 +118,22 @@ class IDQNAgent:
                 indices,
                 weights,
             ) = self.memory.sample(self.config.BATCH_SIZE, steps_done=self.steps_done)  # type: ignore[union-attr]
-            weights = torch.FloatTensor(weights).to(self.device)
+            # Otimização: as_tensor evita cópia redundante e aloca direto no dispositivo
+            weights = torch.as_tensor(weights, dtype=torch.float32, device=self.device)
         else:
             batch = random.sample(self.memory, self.config.BATCH_SIZE)  # type: ignore[arg-type]
             states, actions, rewards, next_states, dones = zip(*batch)
 
-        states = torch.as_tensor(np.array(states), dtype=torch.float32, device=self.device)
-        actions = torch.as_tensor(np.array(actions), dtype=torch.long, device=self.device)
-        rewards = torch.as_tensor(np.array(rewards), dtype=torch.float32, device=self.device)
-        next_states = torch.as_tensor(np.array(next_states), dtype=torch.float32, device=self.device)
-        dones = torch.as_tensor(np.array(dones), dtype=torch.float32, device=self.device)
+        # Otimização: Remove o wrap np.array() desnecessário, pois o buffer já entrega arrays NumPy
+        states = torch.as_tensor(states, dtype=torch.float32, device=self.device)
+        actions = torch.as_tensor(actions, dtype=torch.long, device=self.device)
+        rewards = torch.as_tensor(rewards, dtype=torch.float32, device=self.device)
+        next_states = torch.as_tensor(next_states, dtype=torch.float32, device=self.device)
+        dones = torch.as_tensor(dones, dtype=torch.float32, device=self.device)
+
+        # CORREÇÃO CRÍTICA: Desativa Dropout em ambas as redes para computar alvos estáveis
+        self.policy_net.eval()
+        self.target_net.eval()
 
         with torch.no_grad():
             # Double-DQN: y = r + γ·Q_target(s', argmax_a' Q_policy(s',a'))·(1-done)
@@ -137,12 +143,14 @@ class IDQNAgent:
             )
             target_q = rewards + self.config.GAMMA * next_q_values * (1 - dones)
 
+        # CORREÇÃO CRÍTICA: Reativa o modo de treino na policy_net para a descida de gradiente com Dropout ativo
+        self.policy_net.train()
         current_q = self.policy_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
         # TD error: δ = y - Q(s,a)
         td_errors = target_q - current_q
 
-        # PER loss: L = E_i[w_i · δ_i²] where w_i = (N·P(i))^(-β) / max(w)
+        # PER loss: L = E_i[w_i · δ_i²]
         if self.config.PRIORITIZED_REPLAY and weights is not None:
             loss = (weights * td_errors.pow(2)).mean()
         else:
