@@ -239,7 +239,9 @@ class ImprovedCriticNetwork(nn.Module):
         x = self.layer_norms[0](x)
         x = self.dropout(x)
         for i, layer in enumerate(self.hidden_layers):
+            residual = x
             x = self.activation(layer(x))
             x = self.layer_norms[i + 1](x)
             x = self.dropout(x)
+            x = x + residual  # residual connection (matching ImprovedActorNetwork)
         return self.output_layer(x)
