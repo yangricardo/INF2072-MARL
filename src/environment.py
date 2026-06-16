@@ -283,11 +283,17 @@ class WarehouseEnv(gym.Env):
 
         Permite que algoritmos com obs por-agente diferenciem os robôs mesmo
         usando o mesmo estado global de base.
+
+        Cache: _get_observation() é chamada uma vez por step e reutilizada para
+        todos os robôs, evitando recálculo redundante O(n_robots * n_boxes).
         """
-        base = self._get_observation()
+        # Reuse the base observation computed for this step (cache by step counter)
+        if getattr(self, "_obs_cache_step", -1) != self.steps:
+            self._obs_cache = self._get_observation()
+            self._obs_cache_step = self.steps
         one_hot = np.zeros(self.num_robots, dtype=np.float32)
         one_hot[robot_id] = 1.0
-        return np.concatenate([base, one_hot]).astype(np.float32)
+        return np.concatenate([self._obs_cache, one_hot]).astype(np.float32)
 
     def step(self, actions):  # type: ignore[override]  # MARL: rewards é lista por agente
         self.steps += 1
