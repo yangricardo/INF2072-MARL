@@ -82,7 +82,9 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
         step = 0
 
         for step in range(config.MAX_STEPS):
-            actions = [agent.select_action(obs) for agent in agents]
+            # select_action in parallel — each agent has independent network
+            __opt_futs = [_optimize_pool.submit(agent.select_action, obs) for agent in agents]
+            actions = [f.result() for f in __opt_futs]
             next_obs, rewards, terminated, truncated, info = env.step(actions)
 
             for i, agent in enumerate(agents):
@@ -94,13 +96,12 @@ def train_session(session_dir, agents, config, session_id=1, start_episode=0):
             episode_collisions = info["collisions"]
 
             # Optimize each agent in parallel — only submit when there's real work
-            futures = [
-                _optimize_pool.submit(agent.optimize)
-                for agent in agents
-                if _should_optimize(agent, config)
-            ]
+            futures = {}
+            for agent in agents:
+                if _should_optimize(agent, config):
+                    futures[agent] = _optimize_pool.submit(agent.optimize)
             if futures:
-                wait(futures)
+                wait(list(futures.values()))
 
             obs = next_obs
 
