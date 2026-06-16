@@ -105,6 +105,10 @@ class MAPPOAgent:
         (mantido por compatibilidade com a chamada original)."""
         if len(self.states) == 0:
             return 0, 0
+        # N15: skip update before enough environment steps have been collected
+        if self.steps_done < getattr(self.config, 'LEARNING_STARTS', 0):
+            self.clear_memory()
+            return 0, 0
 
         n = len(self.states)
         states = torch.FloatTensor(np.array(self.states)).to(self.device)
