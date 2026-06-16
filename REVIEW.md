@@ -750,10 +750,10 @@ with torch.no_grad():
 
 ### I8 — `select_action` paralelizado em threads desnecessariamente
 
-**Severidade**: ALTO (performance)  
+**Severidade**: ALTO (performance) — **✅ CORRIGIDO**  
 **Arquivo**: `training.py:85–87`
 
-**Descrição**: `select_action` é submetido a `ThreadPoolExecutor` para cada agente, mas o forward pass de uma MLP de ~1.5M parâmetros em CPU leva < 1ms — o overhead de threading supera o ganho. Além disso, `steps_done` é incrementado em threads paralelas, tornando o annealing do epsilon e do beta do PER não-determinístico.
+**Descrição**: `select_action` era submetido a `ThreadPoolExecutor` para cada agente, mas o forward pass de uma MLP de ~1.5M parâmetros em CPU leva < 1ms — o overhead de threading superava o ganho. Além disso, `steps_done` era incrementado em threads paralelas, tornando o annealing do epsilon e do beta do PER não-determinístico.
 
 ```python
 # Antes (paralelização desnecessária):
@@ -764,7 +764,7 @@ actions = [f.result() for f in __opt_futs]
 actions = [agent.select_action(obs) for agent in agents]
 ```
 
-**Status**: 🔴 PENDENTE — requer modificação cuidadosa para não afetar runners VDN/QMIX/MAPPO/HATRPO.
+**Correção aplicada**: `select_action` agora é chamado serialmente, garantindo `steps_done` determinístico. O `_optimize_pool` permanece para chamadas `optimize()` paralelizadas (O2).
 
 ---
 
@@ -819,13 +819,12 @@ Cada `run()` contém **5 blocos funcionalmente idênticos** (~85 linhas × 4 = 3
 
 ### N8 — `torch._foreach_lerp_` não usado em VDN, QMIX e HATRPO
 
-**Severidade**: BAIXO (performance) — **✅ CORRIGIDO** (VDN e QMIX)  
+**Severidade**: BAIXO (performance) — **✅ CORRIGIDO** (VDN, QMIX e HATRPO)  
 **Arquivos**: `vdn.py:162–166`, `qmix.py:86–93`, `hatrpo.py:154–158`
 
 IDQN (P6) implementou `soft_update_target` com `torch._foreach_lerp_()` vetorizado. VDN, QMIX e HATRPO usavam loop Python com `for target_param, param in zip(...)` (~10× mais lento).
 
-**Correção aplicada em VDN e QMIX**: Substituído loop Python por `torch._foreach_lerp_()`.  
-**Status HATRPO**: 🔴 PENDENTE — usar `torch._foreach_lerp_()` no `CentralizedCriticOptimized.update()`.
+**Correção aplicada**: Substituído loop Python por `torch._foreach_lerp_()` em VDN (`_soft_update`), QMIX (`soft_update_target`) e HATRPO (`CentralizedCriticOptimized.update`).
 
 ---
 
@@ -948,10 +947,10 @@ class BaseConfig:
 | I5 (distance_traveled)              | ✅     | ✅     | N/A    | N/A    | N/A   | N/A    |
 | I6 (checkpoint filename)            | ✅     | ✅     | N/A    | N/A    | N/A   | N/A    |
 | I7 (IDQN dropout inferência)        | ✅     | N/A    | N/A    | N/A    | N/A   | N/A    |
-| I8 (select_action threads)          | 🔴     | 🔴     | N/A    | N/A    | N/A   | N/A    |
+| I8 (select_action threads)          | ✅     | ✅     | N/A    | N/A    | N/A   | N/A    |
 | N1 (CLIP_EPS hardcoded)             | N/A    | N/A    | N/A    | N/A    | N/A   | ✅     |
 | N2 (TAU hardcoded)                  | N/A    | N/A    | N/A    | N/A    | N/A   | ✅     |
-| N8 (_foreach_lerp_)                 | ✅     | N/A    | ✅     | ✅     | N/A   | 🔴     |
+| N8 (_foreach_lerp_)                 | ✅     | N/A    | ✅     | ✅     | N/A   | ✅     |
 
 **Legenda**: ✅ = corrigido / 🔴 = pendente / N/A = não se aplica
 
@@ -966,15 +965,15 @@ class BaseConfig:
 
 ### Alta (correção/performance)
 
-3. **I8**: Remover paralelização de `select_action` no `training.py` — 🔴 PENDENTE
+3. ~~**I8**: ThreadPoolExecutor de `select_action` em `training.py`~~ ✅ CORRIGIDO
 4. **N7**: Unificar runners (longo prazo) — 🔴 PENDENTE
 5. **M5/M6**: Unificar `device` e adicionar `RANDOM_SEED` aos configs
 
 ### Média (organização)
 
 6. **M1–M4**: Refatorar `config.py` com `@dataclass`, separar `EnvConfig` de `AlgoConfig`, unificar PER beta
-7. **N8**: Aplicar `_foreach_lerp_` no HATRPO `CentralizedCriticOptimized.update()`
-8. **N5**: Remover cache `_active_box_indices`
+7. ~~**N8**: `_foreach_lerp_` no HATRPO `CentralizedCriticOptimized.update()`~~ ✅ CORRIGIDO
+8. **N5**: Remover cache `_active_box_indices` — 🟡 BAIXA PRIORIDADE
 
 ---
 
