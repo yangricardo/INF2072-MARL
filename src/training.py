@@ -300,6 +300,7 @@ def run_training(agent_class, config, num_sessions=1, record_video=True):
             "steps": consolidated_metrics["episode_steps"],
             "success_rate": consolidated_metrics["success_rates"],
             "collisions": consolidated_metrics["collisions"],
+            "distance_traveled": consolidated_metrics["distance_traveled"],
         }
     ).to_csv(consolidated_dir / "consolidated_metrics.csv", index=False)
 
