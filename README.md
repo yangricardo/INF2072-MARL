@@ -326,26 +326,18 @@ Mesma arquitetura residual da rede de ator. Acompanhada de uma **rede-alvo** (`c
 - `MAPPOAgent` contém `ActorNetwork` (entrada: obs local 24-dim) e `CriticNetwork` (entrada: estado global 22-dim), com otimizadores Adam separados.
 - **Coleta:** por episódio, armazena estados locais, ações, log-probs, recompensas e estados globais.
 - **Atualização pós-episódio:**
-  1. Computa V(s) com o crítico centralizado.
+  1. Computa $V(s)$ com o crítico centralizado.
   2. **GAE** (Generalized Advantage Estimation, Schulman et al. 2016):
-     ```
-     δ_t = r_t + γ·V(s_{t+1})·(1-done_t) - V(s_t)
-     Â_t = Σ_{l≥0} (γ·λ)^l · δ_{t+l}
-     R_t = Â_t + V(s_t)  (Monte-Carlo returns)
-     Â ← (Â - mean(Â)) / (std(Â) + ε)  (normalização)
-     ```
+     $$\delta_t = r_t + \gamma V(s_{t+1})(1-d_t) - V(s_t)$$
+     $$\hat{A}_t = \sum_{l=0}^{\infty} (\gamma\lambda)^l \delta_{t+l}$$
+     $$\hat{R}_t = \hat{A}_t + V(s_t), \quad \hat{A} \leftarrow \frac{\hat{A} - \mu_{\hat{A}}}{\sigma_{\hat{A}} + \varepsilon}$$
   3. **PPO_EPOCHS=10** repetições com mini-batches de 32:
-     ```
-     r_t(θ) = π_θ(a_t|s_t) / π_θ_old(a_t|s_t)  (probability ratio)
-     
-     L^CLIP(θ) = E_t[ min(r_t·Â_t, clip(r_t, 1-ε, 1+ε)·Â_t) ]
-     H[π] = -Σ_a π(a|s)·log π(a|s)  (entropy)
-     L_actor = -L^CLIP - c_H·H[π]
-     
-     L_critic = E[(V(s) - R_t)²]
-     ```
+     $$r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}$$
+     $$\mathcal{L}^{\text{CLIP}}(\theta) = \mathbb{E}_t\left[\min(r_t \hat{A}_t, \text{clip}(r_t, 1-\varepsilon, 1+\varepsilon) \hat{A}_t)\right]$$
+     $$H[\pi] = -\sum_{a} \pi(a|s) \log \pi(a|s), \quad \mathcal{L}_{\text{actor}} = -\mathcal{L}^{\text{CLIP}} - c_H H[\pi]$$
+     $$\mathcal{L}_{\text{critic}} = \mathbb{E}\left[(V(s) - \hat{R}_t)^2\right]$$
   4. Clip de gradiente em 0,5 para ator e crítico.
-- Decaimento multiplicativo de epsilon: ε ← ε × 0.995 por episódio.
+- Decaimento multiplicativo de epsilon: $\varepsilon \leftarrow \varepsilon \times 0.995$ por episódio.
 
 **Hiperparâmetros principais:**
 
