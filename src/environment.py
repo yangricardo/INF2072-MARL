@@ -306,20 +306,22 @@ class WarehouseEnv(gym.Env):
         Cache: _get_observation() é chamada uma vez por step e reutilizada para
         todos os robôs, evitando recálculo redundante O(n_robots * n_boxes).
         """
-        # Reuse the base observation computed for this step (cache by step counter)
+        """Observação egocêntrica: estado global + ID one-hot + Flag de Inventário."""
         if getattr(self, "_obs_cache_step", -1) != self.steps:
             self._obs_cache = self._get_observation()
             self._obs_cache_step = self.steps
+        
+        # 1. Identidade do Robô (Tamanho 2)
         one_hot = np.zeros(self.num_robots, dtype=np.float32)
         one_hot[robot_id] = 1.0
         
-        # INCLUSÃO CRÍTICA: Fornece o estado de inventário do próprio robô (0.0=Vazio, 1.0=Carregando)
+        # 2. CONSCIÊNCIA DE INVENTÁRIO (Tamanho 1: 0.0 se vazio, 1.0 se carregando)
         carrying_flag = np.array(
             [1.0 if self.robot_carrying[robot_id] is not None else 0.0], 
             dtype=np.float32
         )
         
-        # O vetor expande para dimensão 43 automaticamente e a rede vai se readequar sozinha
+        # Concatena tudo de forma limpa. O tamanho salta de 42 para 43 automaticamente.
         return np.concatenate([self._obs_cache, one_hot, carrying_flag]).astype(np.float32)
 
     def step(self, actions):  # type: ignore[override]  # MARL: rewards é lista por agente
