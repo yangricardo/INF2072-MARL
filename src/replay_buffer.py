@@ -16,13 +16,15 @@ class PrioritizedReplayBuffer:
 
     def push(self, state, action, reward, next_state, done):
         max_priority = max(self.priorities) if self.priorities else 1.0
+        # New transitions get the maximum priority (already alpha-exponentiated in update_priorities)
+        priority = max_priority ** self.alpha
 
         if len(self.buffer) < self.capacity:
             self.buffer.append((state, action, reward, next_state, done))
-            self.priorities.append(max_priority)
+            self.priorities.append(priority)
         else:
             self.buffer[self.position] = (state, action, reward, next_state, done)
-            self.priorities[self.position] = max_priority
+            self.priorities[self.position] = priority
 
         self.position = (self.position + 1) % self.capacity
 
@@ -32,12 +34,13 @@ class PrioritizedReplayBuffer:
         else:
             priorities = np.array(self.priorities[: len(self.buffer)])
 
-        probs = priorities ** self.alpha
-        probs /= probs.sum()
+        # Probabilities P(i) = p_i / sum(p_j), where p_i is already alpha-exponentiated in update_priorities/push
+        probs = priorities / priorities.sum()
 
         indices = np.random.choice(len(self.buffer), batch_size, p=probs)
 
         total = len(self.buffer)
+        # Importance-sampling correction: w_i = (N * P(i))^(-beta) / max_j(w_j)
         weights = (total * probs[indices]) ** (-self.beta)
         weights /= weights.max()
 
@@ -132,13 +135,15 @@ class QMIXPrioritizedReplayBuffer:
     def push(self, state, actions, rewards, next_state, done, global_state, next_global_state):
         max_priority = max(self.priorities) if self.priorities else 1.0
         transition = (state, actions, rewards, next_state, done, global_state, next_global_state)
+        # New transitions get the maximum priority (already alpha-exponentiated in update_priorities)
+        priority = max_priority ** self.alpha
 
         if len(self.buffer) < self.capacity:
             self.buffer.append(transition)
-            self.priorities.append(max_priority)
+            self.priorities.append(priority)
         else:
             self.buffer[self.position] = transition
-            self.priorities[self.position] = max_priority
+            self.priorities[self.position] = priority
 
         self.position = (self.position + 1) % self.capacity
 
@@ -148,12 +153,13 @@ class QMIXPrioritizedReplayBuffer:
         else:
             priorities = np.array(self.priorities[: len(self.buffer)])
 
-        probs = priorities ** self.alpha
-        probs /= probs.sum()
+        # Probabilities P(i) = p_i / sum(p_j), where p_i is already alpha-exponentiated in update_priorities/push
+        probs = priorities / priorities.sum()
 
         indices = np.random.choice(len(self.buffer), batch_size, p=probs)
 
         total = len(self.buffer)
+        # Importance-sampling correction: w_i = (N * P(i))^(-beta) / max_j(w_j)
         weights = (total * probs[indices]) ** (-self.beta)
         weights /= weights.max()
 
