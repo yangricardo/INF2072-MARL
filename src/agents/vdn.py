@@ -90,10 +90,19 @@ class VDNController:
         self.steps_done += 1
         eps = self.get_epsilon() if training else 0.0
         actions = []
+        
+        # Otimização Crítica: Sorteia a exploração ANTES de tocar no PyTorch ou na GPU
+        agent_explores = [training and np.random.random() < eps for _ in range(self.n_agents)]
+        
+        # Se ambos os agentes decidirem explorar aleatoriamente, evitamos 100% o custo da GPU
+        if all(agent_explores):
+            return [np.random.randint(self.action_dim) for _ in range(self.n_agents)]
+            
         with torch.no_grad():
+            # Só criamos o tensor se pelo menos um agente precisar consultar a rede neural
             obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
-            for net in self.policy_nets:
-                if training and np.random.random() < eps:
+            for i, net in enumerate(self.policy_nets):
+                if agent_explores[i]:
                     actions.append(np.random.randint(self.action_dim))
                 else:
                     net.eval()
@@ -226,7 +235,10 @@ def run(config=None, num_sessions=1, record_video=True):
             obs = nobs
             if done:
                 break
-        controller.scheduler.step()
+                
+        # Correção do Warning: Só atualiza o agendador se o otimizador já tiver trabalhado
+        if controller.learning_steps > 0:
+            controller.scheduler.step()
 
         metrics["episode_rewards"].append(ep_reward)
         metrics["episode_deliveries"].append(info["total_deliveries"])
