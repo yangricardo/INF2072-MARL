@@ -18,7 +18,7 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-from ..config import VDNConfig
+from ..config import DEVICE, VDNConfig
 from ..environment import WarehouseEnv
 from ..evaluation import plot_consolidated_results, record_policy_video
 from ..networks import AgentNet
@@ -32,7 +32,7 @@ class VDNController:
         self.n_agents = n_agents
         self.action_dim = action_dim
         self.config = config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = DEVICE
 
         self.policy_nets = nn.ModuleList(
             [
