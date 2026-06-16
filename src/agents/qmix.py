@@ -16,7 +16,7 @@ import torch
 import torch.optim as optim
 from tqdm import tqdm
 
-from ..config import QMIXConfig
+from ..config import DEVICE, QMIXConfig
 from ..environment import WarehouseEnv
 from ..evaluation import plot_consolidated_results, record_policy_video
 from ..networks import ImprovedDQN, QMixer
@@ -31,7 +31,7 @@ class QMIXAgent:
         self.action_dim = action_dim
         self.config = config
         self.n_agents = n_agents
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = DEVICE
 
         self.policy_net = ImprovedDQN(
             state_dim, action_dim, config.HIDDEN_DIM, config.DROPOUT_RATE
@@ -88,11 +88,13 @@ class QMIXAgent:
 
     def soft_update_target(self):
         # Polyak averaging (soft update) — vetorizado via _foreach_lerp_
-        torch._foreach_lerp_(
-            list(self.target_net.parameters()),
-            list(self.policy_net.parameters()),
-            self.config.TAU,
-        )
+        # B10: torch.no_grad() necessário pois _foreach_lerp_ é in-place em leaf tensors
+        with torch.no_grad():
+            torch._foreach_lerp_(
+                list(self.target_net.parameters()),
+                list(self.policy_net.parameters()),
+                self.config.TAU,
+            )
 
 
 class QMIXTrainer:
@@ -104,7 +106,7 @@ class QMIXTrainer:
         self.config = config
         self.state_dim = state_dim
         self.global_state_dim = global_state_dim
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = DEVICE
 
         self.memory = QMIXPrioritizedReplayBuffer(config.BUFFER_SIZE, alpha=config.ALPHA)
         self.mixer_optimizer = optim.Adam(mixer.parameters(), lr=config.LEARNING_RATE)
