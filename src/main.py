@@ -2,20 +2,44 @@
 
 Exemplos:
     python -m src.main --algo idqn --episodes 5
-    python -m src.main --algo random --episodes 5 --no-video
-    python -m src.main --algo idqn --sessions 2
+    python -m src.main --algo vdn --episodes 5 --no-video
+    python -m src.main --algo random --episodes 5
 """
 
 import argparse
 import traceback
 
-from .agents import IDQNAgent, RandomAgent
-from .config import IDQNConfig, RandomConfig
+from .agents import IDQNAgent, RandomAgent, hatrpo, mappo, qmix, vdn
+from .config import (
+    HATRPOConfig,
+    IDQNConfig,
+    MAPPOConfig,
+    QMIXConfig,
+    RandomConfig,
+    VDNConfig,
+)
 from .training import run_training
 
+
+def _value_based_runner(agent_class):
+    """Adapta o loop compartilhado (IDQN/Random) à assinatura uniforme de runner."""
+
+    def runner(config, num_sessions, record_video):
+        return run_training(
+            agent_class, config, num_sessions=num_sessions, record_video=record_video
+        )
+
+    return runner
+
+
+# algo -> (runner(config, num_sessions, record_video), config_class)
 ALGORITHMS = {
-    "idqn": (IDQNAgent, IDQNConfig),
-    "random": (RandomAgent, RandomConfig),
+    "idqn": (_value_based_runner(IDQNAgent), IDQNConfig),
+    "random": (_value_based_runner(RandomAgent), RandomConfig),
+    "vdn": (vdn.run, VDNConfig),
+    "qmix": (qmix.run, QMIXConfig),
+    "mappo": (mappo.run, MAPPOConfig),
+    "hatrpo": (hatrpo.run, HATRPOConfig),
 }
 
 
@@ -30,7 +54,7 @@ def build_config(config_class, args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Treino MARL no ambiente Warehouse (IDQN ou baseline aleatório)."
+        description="Treino MARL no ambiente Warehouse (IDQN, Random, VDN, ...)."
     )
     parser.add_argument(
         "--algo",
@@ -63,22 +87,15 @@ def main():
     )
     args = parser.parse_args()
 
-    agent_class, config_class = ALGORITHMS[args.algo]
+    runner, config_class = ALGORITHMS[args.algo]
     config = build_config(config_class, args)
 
     try:
-        agents, metrics, video_path = run_training(
-            agent_class,
-            config,
-            num_sessions=args.sessions,
-            record_video=not args.no_video,
-        )
+        runner(config, num_sessions=args.sessions, record_video=not args.no_video)
 
         print("\n" + "=" * 60)
         print("✨ TREINAMENTO E AVALIAÇÃO CONCLUÍDOS COM SUCESSO! ✨")
         print("=" * 60)
-        if video_path:
-            print(f"\n📹 Vídeo gerado em: {video_path}")
     except Exception as e:
         print(f"\n❌ Erro durante o treinamento: {e}")
         traceback.print_exc()
