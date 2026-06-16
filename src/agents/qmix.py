@@ -136,8 +136,10 @@ class QMIXTrainer:
         weights = torch.FloatTensor(weights).to(self.device)
 
         curr_qs = []
+        curr_qs_all = []  # cache all Q-values for reuse in per-agent loss
         for i, agent in enumerate(self.agents):
             agent_qs = agent.get_q_values(states)
+            curr_qs_all.append(agent_qs)
             curr_qs.append(agent_qs.gather(1, actions[:, i].unsqueeze(1)))
         curr_qs = torch.cat(curr_qs, dim=1)
 
@@ -163,10 +165,10 @@ class QMIXTrainer:
         torch.nn.utils.clip_grad_norm_(self.mixer.parameters(), self.config.MAX_GRAD_NORM)
         self.mixer_optimizer.step()
 
-        for agent in self.agents:
+        for i, agent in enumerate(self.agents):
             agent.optimizer.zero_grad()
-            agent_qs = agent.get_q_values(states)
-            agent_curr_qs = agent_qs.gather(1, actions[:, agent.agent_id].unsqueeze(1))
+            # Reuse cached Q-values instead of calling get_q_values again
+            agent_curr_qs = curr_qs_all[i].gather(1, actions[:, agent.agent_id].unsqueeze(1))
             agent_loss = (weights * (target - curr_q_total).detach() * agent_curr_qs).mean()
             agent_loss.backward()
             torch.nn.utils.clip_grad_norm_(
@@ -217,6 +219,9 @@ def run(config=None, num_sessions=1, record_video=True):
         "collisions": [],
     }
 
+    # Persistent ThreadPoolExecutor for select_action — NOT created per step
+    _qmix_pool = ThreadPoolExecutor(max_workers=len(agents), thread_name_prefix="qmix")
+
     for ep in tqdm(range(total_episodes), desc="QMIX"):
         obs, info = env.reset()
         global_state = env._get_global_state()
@@ -224,8 +229,8 @@ def run(config=None, num_sessions=1, record_video=True):
         step = 0
         for step in range(config.MAX_STEPS):
             # select_action in parallel — each agent has independent network and state
-            with ThreadPoolExecutor(max_workers=len(agents)) as ex:
-                actions = list(ex.map(lambda a: a.select_action(obs), agents))
+            action_futures = [_qmix_pool.submit(a.select_action, obs) for a in agents]
+            actions = [f.result() for f in action_futures]
             next_obs, rewards, terminated, truncated, info = env.step(actions)
             next_global_state = env._get_global_state()
             trainer.remember(
