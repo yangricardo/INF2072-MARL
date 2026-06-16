@@ -157,8 +157,8 @@ class MAPPOAgent:
                 actor_loss = actor_loss - self.config.ENTROPY_COEF * entropy
 
                 batch_values = self.critic(batch_global_states).squeeze(-1)
-                # Critic MSE loss: L_V = E[(V(s) - R_t)²]
-                critic_loss = F.mse_loss(batch_values, batch_returns)
+                # Critic MSE loss: L_V = c_V · E[(V(s) - R_t)²]
+                critic_loss = self.config.VALUE_LOSS_COEF * F.mse_loss(batch_values, batch_returns)
 
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
