@@ -114,7 +114,7 @@ class IDQNAgent:
                 dones,
                 indices,
                 weights,
-            ) = self.memory.sample(self.config.BATCH_SIZE)  # type: ignore[union-attr]
+            ) = self.memory.sample(self.config.BATCH_SIZE, steps_done=self.steps_done)  # type: ignore[union-attr]
             weights = torch.FloatTensor(weights).to(self.device)
         else:
             batch = random.sample(self.memory, self.config.BATCH_SIZE)  # type: ignore[arg-type]
