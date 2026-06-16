@@ -62,12 +62,17 @@ class VDNController:
         self.memory = VDNPrioritizedReplayBuffer(config.BUFFER_SIZE, alpha=config.ALPHA)
         self.steps_done = 0
         self.learning_steps = 0
+        self._total_train_steps = 0  # set externally via run() for beta annealing
         self.losses = []
 
     def _get_beta(self):
-        frac = min(
-            1.0, self.steps_done / (self.config.EPISODES_TOTAL * self.config.MAX_STEPS)
-        )
+        # N17: use EPISODES_TOTAL * MAX_STEPS as upper bound — the fraction
+        # may be < 1 if episodes terminate early, which is acceptable (annealing
+        # is simply slower). We cap at 1.0 to guarantee beta ∈ [BETA_START, BETA_END].
+        if self._total_train_steps > 0:
+            frac = min(1.0, self.steps_done / self._total_train_steps)
+        else:
+            frac = min(1.0, self.steps_done / (self.config.EPISODES_TOTAL * self.config.MAX_STEPS))
         return self.config.BETA_START + frac * (
             self.config.BETA_END - self.config.BETA_START
         )
