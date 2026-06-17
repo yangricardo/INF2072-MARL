@@ -1,0 +1,39 @@
+
+========================================
+RELATÓRIO FINAL — VDN v6 (3000 EPISÓDIOS)
+========================================
+DATA:      2026-06-15 22:34:18
+DIRETÓRIO: /content/drive/MyDrive/Atividades/PUC-DI/LocalMultiAgente/Código/vdn_results_v6_20260615_213758
+
+CORREÇÕES v6 vs v5:
+  Curriculum:    episódio fixo → performance ≥ threshold
+  Warm-up:       100 eps (ε=0.5) ao trocar de fase
+  PER alpha:     0.5 → 0.3
+  PER beta_start: 0.4 → 0.6
+  TRAIN_FREQ:    4 → 8
+  EPSILON_END:   0.05 → 0.10
+
+FASES REALIZADAS:
+  Transições nos eps: [439, 960, 1742]
+  Fase final atingida: 8 caixas
+
+MÉTRICAS (últimos 100 episódios):
+  Recompensa média:     637.22
+  Entregas médias:      7.15/8
+  Sucesso completo:     57.0%
+  Colisões médias:      317.0
+  Tempo total:          56.2 min
+  LR final:             5.00e-05
+
+MELHORES RESULTADOS:
+  Melhor recompensa:  907.47
+  Máx entregas/ep:    8/8
+  Menor steps:        78
+
+GRÁFICOS (10):
+  grafico_recompensa_vdn.png    grafico_entregas_vdn.png
+  grafico_steps_vdn.png         grafico_taxa_sucesso_vdn.png
+  grafico_colisoes_vdn.png      grafico_falhas_vdn.png
+  grafico_distancia_vdn.png     grafico_loss_vdn.png
+  grafico_lr_epsilon_vdn.png    grafico_curriculum_vdn.png
+========================================

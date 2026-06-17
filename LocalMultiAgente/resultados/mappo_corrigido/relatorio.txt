@@ -1,0 +1,41 @@
+
+    ========================================
+    RELATÓRIO FINAL - MAPPO (3000 EPISÓDIOS)
+    ========================================
+
+    DATA: 2026-06-15 21:49:45
+    DIRETÓRIO: /Users/ericgoulart/INF2072-MARL/LocalMultiAgente/Código/Analise_Real/mappo_fixed_results_20260615_214440
+
+    CONFIGURAÇÃO OTIMIZADA:
+    - Total de episódios: 3000
+    - Tempo total: 5.1 minutos
+    - EPSILON_DECAY_STEPS: 100000
+    - ACTOR_LR: 0.0001
+    - ENTROPY_COEF: 0.05
+    - PPO_EPOCHS: 8
+    - Barreiras Y removidas: 50% chance
+    - Falhas nos robôs: 20% chance
+
+    MÉTRICAS FINAIS (últimos 100 episódios):
+    - Recompensa média: 313.70
+    - Entregas médias: 8.00/8
+    - Taxa de sucesso final: 100.0%
+    - Colisões médias: 24.9
+    - Total falhas R1: 77914
+    - Total falhas R2: 77963
+
+    MELHORES RESULTADOS:
+    - Melhor recompensa: 317.20
+    - Melhor entrega: 8/8
+    - Menor número de steps: 31
+
+    GRÁFICOS GERADOS (SEM MÉDIA MÓVEL):
+    - grafico_recompensa.png (3000 pontos)
+    - grafico_entregas.png (3000 pontos)
+    - grafico_steps.png (3000 pontos)
+    - grafico_taxa_sucesso.png (3000 pontos)
+    - grafico_colisoes.png (3000 pontos)
+    - grafico_falhas.png (3000 pontos)
+
+    ========================================
+    

@@ -1,0 +1,39 @@
+
+========================================
+RELATÓRIO FINAL — VDN (3000 EPISÓDIOS)
+========================================
+DATA:      2026-06-16 09:53:22
+DIRETÓRIO: /Users/ericgoulart/INF2072-MARL/LocalMultiAgente/resultados/vdn_ajustado
+
+CONFIGURAÇÃO:
+  Método:          VDN (Value Decomposition Networks)
+  Q_total          = Q1 + Q2  (decomposição aditiva)
+  Episódios:       3000
+  Tempo total:     650.8 min
+  Batch Size:      256
+  Learning Rate:   0.0003
+  Gamma:           0.97
+  Hidden Dim:      256
+  Falhas robôs:    15%
+
+MÉTRICAS (últimos 100 episódios):
+  Recompensa média:       44.92
+  Entregas médias:        1.77/8
+  Taxa sucesso completo:  0.0%  (8/8 caixas)
+  Colisões médias:        261.4
+
+MELHORES RESULTADOS:
+  Melhor recompensa:  378.01
+  Máx entregas/ep:    8/8
+  Menor steps:        251
+
+GRÁFICOS GERADOS (8):
+  grafico_recompensa_vdn.png
+  grafico_entregas_vdn.png
+  grafico_steps_vdn.png
+  grafico_taxa_sucesso_vdn.png
+  grafico_colisoes_vdn.png
+  grafico_falhas_vdn.png
+  grafico_distancia_vdn.png
+  grafico_loss_vdn.png
+========================================

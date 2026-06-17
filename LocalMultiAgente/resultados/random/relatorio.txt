@@ -1,0 +1,45 @@
+
+    ========================================
+    RELATÓRIO FINAL - MODELO RANDÔMICO
+    ========================================
+
+    DATA: 2026-06-12 00:33:54
+    DIRETÓRIO: /content/drive/MyDrive/Atividades/PUC-DI/LocalMultiAgente/Código/random_model_results_20260612_003320
+
+    CONFIGURAÇÃO:
+    - Modelo: Randômico (ações aleatórias)
+    - Total de episódios: 3000
+    - Tempo total: 0.5 minutos
+    - Máximo de steps por episódio: 500
+    - Falhas nos robôs: 20% chance
+    - Barreiras Y: removidas aleatoriamente (50% chance)
+
+    MÉTRICAS FINAIS (últimos 100 episódios):
+    - Recompensa média: 85.03
+    - Entregas médias: 3.19/8
+    - Taxa de sucesso final: 100.0%
+    - Colisões médias: 138.1
+    - Total falhas R1: 196157
+    - Total falhas R2: 195478
+
+    MELHORES RESULTADOS:
+    - Melhor recompensa: 312.57
+    - Melhor entrega: 8/8
+    - Menor número de steps: 145
+
+    GRÁFICOS GERADOS:
+    - grafico_recompensa_random.png
+    - grafico_entregas_random.png
+    - grafico_steps_random.png
+    - grafico_taxa_sucesso_random.png
+    - grafico_colisoes_random.png
+    - grafico_falhas_random.png
+    - grafico_distancia_random.png
+
+    OBSERVAÇÃO: 
+    Este é um modelo randômico (ações totalmente aleatórias).
+    Os resultados servem como linha de base (baseline) para comparação
+    com modelos treinados como IDQN, QMIX ou MAPPO.
+
+    ========================================
+    

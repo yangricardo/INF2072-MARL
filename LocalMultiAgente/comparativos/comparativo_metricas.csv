@@ -1,0 +1,7 @@
+metodo,episodios,recompensa_media,entregas_media_de_8,taxa_sucesso_frac_caixas,colisoes_media,melhor_recompensa,max_entregas
+Random,3000,85.03,3.19,0.399,138.1,312.57,8
+IDQN,3000,316.05,8.0,1.0,9.2,317.81,8
+VDN,3000,7.03,1.04,0.13,807.3,373.66,8
+VDN (ajustado),3000,44.92,1.77,0.221,261.4,378.01,8
+MAPPO (orig.),3000,-9.52,0.07,0.009,263.7,308.69,8
+MAPPO (corrig.),3000,313.7,8.0,1.0,24.8,317.2,8
